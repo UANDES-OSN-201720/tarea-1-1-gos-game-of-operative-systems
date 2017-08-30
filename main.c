@@ -21,7 +21,7 @@ const int DUMP_ACCS = 5;
 const int DUMP_ERRS = 6;
 
 int* splitCommand(char** commandBuf);
-int killChild(int pid);
+void killChild(int pid);
 
 int main(int argc, char** argv) {
   size_t bufsize = 512;
@@ -57,18 +57,20 @@ int main(int argc, char** argv) {
         killChild(childPID);
       }
       break;
-    }
-    else if (command[0] == LIST){
+      
+    } else if (command[0] == LIST) {
       printf("Lista de sucursales: \n");
       for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
         printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex]);
+        // TODO: Missing accounts amount for every office.
+        
       }
-    }
-    else if (command[0] == KILL){
+      
+    } else if (command[0] == KILL) {
       int childPID = command[1];
       killChild(childPID);
-    }
-    else if (command[0] == INIT) {
+      
+    } else if (command[0] == INIT) {
       // OJO: Llamar a fork dentro de un ciclo
       // es potencialmente peligroso, dado que accidentalmente
       // pueden iniciarse procesos sin control.
@@ -86,9 +88,7 @@ int main(int argc, char** argv) {
         write(bankPipe[1], msg, (strlen(msg)+1));
         
         continue;
-      }
-      // Proceso de sucursal
-      else if (!sucid) {
+      } else if (!sucid) {
         int sucId = getpid() % 1000;
         int accountAmount = command[1];
         int accountsArray[accountAmount];
@@ -110,17 +110,27 @@ int main(int argc, char** argv) {
         // debido a razones documentadas aqui:
         // https://goo.gl/Yxyuxb
         _exit(EXIT_SUCCESS);
-      }
-      // error
-      else {
+        
+      } else {
         fprintf(stderr, "Error al crear proceso de sucursal!\n");
         return (EXIT_FAILURE);
+        
       }
-    }
-    else {
+    } else if (command[0] == DUMP) {
+      int childPID = command[1];
+      // TODO: Generate transactions CSV
+      
+    }  else if (command[0] == DUMP_ACCS) {
+      int childPID = command[1];
+      // TODO: Generate accounts statuses CSV
+      
+    }  else if (command[0] == DUMP_ERRS) {
+      int childPID = command[1];
+      // TODO: Generate transactions errors CSV
+    
+    } else {
       fprintf(stderr, "Comando no reconocido.\n");
     }
-    // Implementar a continuacion los otros comandos
   }
   
   printf("Terminando ejecucion limpiamente...\n");
@@ -184,7 +194,7 @@ int* splitCommand(char** commandBuf){
   return output;
 }
 
-int killChild(int pid){
+void killChild(int pid){
   kill(pid, SIGTERM);
   printf("Matando hijo pid:'%d'\n", pid);
   
