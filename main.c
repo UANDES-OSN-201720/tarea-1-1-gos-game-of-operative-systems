@@ -15,7 +15,9 @@
 int main(int argc, char** argv) {
   size_t bufsize = 512;
   char* commandBuf = malloc(sizeof(char)*bufsize);
-
+  int pidArray[10];
+  int pidArrayCounter = 0;
+  
   // Para guardar descriptores de pipe
   // el elemento 0 es para lectura
   // y el elemento 1 es para escritura.
@@ -40,6 +42,12 @@ int main(int argc, char** argv) {
     if (!strncmp("quit", commandBuf, strlen("quit"))) {
         break;
     }
+    else if (!strncmp("list", commandBuf, strlen("list"))){
+      printf("Lista de sucursales: \n");
+      for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
+        printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex]);
+      }
+    }
     else if (!strncmp("init", commandBuf, strlen("init"))) {
       // OJO: Llamar a fork dentro de un ciclo
       // es potencialmente peligroso, dado que accidentalmente
@@ -49,7 +57,10 @@ int main(int argc, char** argv) {
 
       if (sucid > 0) {
         printf("Sucursal creada con ID '%d'\n", sucid);
-
+        
+        pidArray[pidArrayCounter] = sucid;
+        pidArrayCounter = pidArrayCounter + 1;
+        
         // Enviando saludo a la sucursal
         char msg[] = "Hola sucursal, como estas?";
         write(bankPipe[1], msg, (strlen(msg)+1));
