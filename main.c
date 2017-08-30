@@ -21,6 +21,7 @@ const int DUMP_ACCS = 5;
 const int DUMP_ERRS = 6;
 
 int* splitCommand(char** commandBuf);
+int killChild(int pid);
 
 int main(int argc, char** argv) {
   size_t bufsize = 512;
@@ -51,6 +52,10 @@ int main(int argc, char** argv) {
     printf("Comando ingresado: '%d'\n", command[0]);
     
     if (command[0] == QUIT) {
+      for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
+        int childPID = pidArray[sucIndex];
+        killChild(childPID);
+      }
       break;
     }
     else if (command[0] == LIST){
@@ -58,6 +63,10 @@ int main(int argc, char** argv) {
       for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
         printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex]);
       }
+    }
+    else if (command[0] == KILL){
+      int childPID = command[1];
+      killChild(childPID);
     }
     else if (command[0] == INIT) {
       // OJO: Llamar a fork dentro de un ciclo
@@ -174,3 +183,20 @@ int* splitCommand(char** commandBuf){
   
   return output;
 }
+
+int killChild(int pid){
+  kill(pid, SIGTERM);
+  printf("Matando hijo pid:'%d'\n", pid);
+  
+  bool died = false;
+  for (int loop = 0; !died && loop < 5; loop++){
+    int status;
+    pid_t id;
+    sleep(1);
+    if (waitpid(pid, &status, WNOHANG) == pid) died = true;
+  }
+  
+  if (!died) kill(pid, SIGKILL);
+}
+
+
