@@ -60,23 +60,22 @@ int main(int argc, char** argv) {
       else if (!sucid) {
         int sucId = getpid() % 1000;
         printf("Hola, soy la sucursal '%d'\n", sucId);
-        while (true) {
-          // 100 milisegundos...
-          int bytes = read(bankPipe[0], readbuffer, sizeof(readbuffer));
-          printf("Soy la sucursal '%d' y me llego mensaje '%s' de '%d' bytes.\n",
-            sucId, readbuffer, bytes);
-
-          // Usar usleep para dormir una cantidad de microsegundos
-          // usleep(100000);
-
-          // Cerrar lado de lectura del pipe
-          close(bankPipe[0]);
-
-          // Para terminar, el proceso hijo debe llamar a _exit,
-          // debido a razones documentadas aqui:
-          // https://goo.gl/Yxyuxb
-          _exit(EXIT_SUCCESS);
-        }
+        
+        // 100 milisegundos...
+        int bytes = read(bankPipe[0], readbuffer, sizeof(readbuffer));
+        printf("Soy la sucursal '%d' y me llego mensaje '%s' de '%d' bytes.\n",
+               sucId, readbuffer, bytes);
+          
+        // Usar usleep para dormir una cantidad de microsegundos
+        // usleep(100000);
+          
+        // Cerrar lado de lectura del pipe
+        close(bankPipe[0]);
+          
+        // Para terminar, el proceso hijo debe llamar a _exit,
+        // debido a razones documentadas aqui:
+        // https://goo.gl/Yxyuxb
+        _exit(EXIT_SUCCESS);
       }
       // error
       else {
