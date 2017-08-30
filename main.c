@@ -81,6 +81,9 @@ int main(int argc, char** argv) {
       // Proceso de sucursal
       else if (!sucid) {
         int sucId = getpid() % 1000;
+        int accountAmount = command[1];
+        int accountsArray[accountAmount];
+        
         printf("Hola, soy la sucursal '%d'\n", sucId);
         
         // 100 milisegundos...
