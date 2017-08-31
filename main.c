@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <pthread.h>
 
 // Cuenten con este codigo monolitico en una funcion
 // main como punto de partida.
@@ -23,6 +24,8 @@ const int DUMP_ERRS = 6;
 int* splitCommand(char** commandBuf);
 void killChild(int pid);
 int get_int(char *string);
+void *asyncRequestTransaction(void *voidOfficePID);
+void *asyncResponseTransaction(void *voidOfficePID);
 
 int main(int argc, char** argv) {
   size_t bufsize = 512;
@@ -58,19 +61,21 @@ int main(int argc, char** argv) {
         killChild(childPID);
       }
       break;
-    }
-    else if (command[0] == LIST){
+
+    } else if (command[0] == LIST) {
       printf("Lista de sucursales: \n");
       for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
         printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex]);
+        // TODO: Missing accounts amount for every office.
+
       }
-    }
-    else if (command[0] == KILL){
+
+    } else if (command[0] == KILL) {
       int childPID = command[1];
       killChild(childPID);
+
       printf("Sucursal %lu cerrada\n", childPID);
-    }
-    else if (command[0] == INIT) {
+    } else if (command[0] == INIT) {
       // OJO: Llamar a fork dentro de un ciclo
       // es potencialmente peligroso, dado que accidentalmente
       // pueden iniciarse procesos sin control.
@@ -88,41 +93,53 @@ int main(int argc, char** argv) {
         write(bankPipe[1], msg, (strlen(msg)+1));
 
         continue;
-      }
-      // Proceso de sucursal
-      else if (!sucid) {
-        int sucId = getpid() % 1000;
+      } else if (!sucid) {
+        int officeId = getpid();
         int accountAmount = command[1];
         int accountsArray[accountAmount];
 
-        printf("Hola, soy la sucursal '%d'\n", sucId);
+        int* availableOffices[128];
 
-        // 100 milisegundos...
-        int bytes = read(bankPipe[0], readbuffer, sizeof(readbuffer));
-        printf("Soy la sucursal '%d' y me llego mensaje '%s' de '%d' bytes.\n",
-               sucId, readbuffer, bytes);
+        // Create transactionRequest thread
+        pthread_t transactionRequestThread;
+        int transactionsRequestsDisabled = pthread_create(&transactionRequestThread, NULL, asyncRequestTransaction, &officeId);
+        if (transactionsRequestsDisabled){
+          printf("Error creating transactions request thread. Consider killing the office.\n");
+        }
 
-        // Usar usleep para dormir una cantidad de microsegundos
-        // usleep(100000);
+        // Create transactionResponse thread
+        pthread_t transactionResponseThread;
+        int transactionsResponsesDisabled = pthread_create(&transactionResponseThread, NULL, asyncResponseTransaction, &officeId);
+        if (transactionsResponsesDisabled){
+          printf("Error creating transactions response thread. Consider killing the office.\n");
+        }
 
-        // Cerrar lado de lectura del pipe
-        close(bankPipe[0]);
+        // This while prevents the process from being killed
+        while(true){
+        }
 
-        // Para terminar, el proceso hijo debe llamar a _exit,
-        // debido a razones documentadas aqui:
-        // https://goo.gl/Yxyuxb
         _exit(EXIT_SUCCESS);
-      }
-      // error
-      else {
+
+      } else {
         fprintf(stderr, "Error al crear proceso de sucursal!\n");
         return (EXIT_FAILURE);
+
       }
-    }
-    else {
+    } else if (command[0] == DUMP) {
+      int childPID = command[1];
+      // TODO: Generate transactions CSV
+
+    }  else if (command[0] == DUMP_ACCS) {
+      int childPID = command[1];
+      // TODO: Generate accounts statuses CSV
+
+    }  else if (command[0] == DUMP_ERRS) {
+      int childPID = command[1];
+      // TODO: Generate transactions errors CSV
+
+    } else {
       fprintf(stderr, "Comando no reconocido.\n");
     }
-    // Implementar a continuacion los otros comandos
   }
 
   printf("Terminando ejecucion limpiamente...\n");
@@ -164,6 +181,7 @@ int* splitCommand(char** commandBuf){
   } else if (!strncmp("dump", *commandBuf, strlen("dump"))){
 
     output[0] = DUMP;
+
     output[1] = getPid(*commandBuf);
 
     return output;
@@ -224,4 +242,21 @@ int getPid(char *commandBuf){
 	free(str_pid);
 
 	return pid;
+}
+void *asyncRequestTransaction(void *voidOfficePID) {
+  int *officePID = voidOfficePID;
+
+  while(true){
+    printf("Async transaction request initiated from pid: '%d'\n", *officePID);
+    sleep(1);
+  }
+}
+
+void *asyncResponseTransaction(void *voidOfficePID) {
+    int *officePID = voidOfficePID;
+
+    while(true){
+      printf("Async transaction response initiated from pid: '%d'\n", *officePID);
+      sleep(1);
+    }
 }
