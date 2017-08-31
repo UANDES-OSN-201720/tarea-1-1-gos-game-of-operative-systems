@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
         break;
 
     } else if (command[0] == LIST) {  printf("Lista de sucursales: \n");
-      for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
+      for (int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
         printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex]);
         // TODO: Missing accounts amount for every office.
 
@@ -93,7 +93,14 @@ int main(int argc, char** argv) {
       int childPID = command[1];
       killChild(childPID);
 
-      printf("Sucursal %lu cerrada\n", childPID);
+      for (int i = 0; i < pidArrayCounter; i++){
+        if (pidArray[i] == childPID){
+          pidArray[i] = pidArray[pidArrayCounter];
+          pidArrayCounter = pidArrayCounter -1;
+        }
+      }
+      
+      printf("Sucursal %d cerrada\n", childPID);
     } else if (command[0] == INIT) {
       // OJO: Llamar a fork dentro de un ciclo
       // es potencialmente peligroso, dado que accidentalmente
@@ -191,7 +198,7 @@ int* splitCommand(char** commandBuf){
   } else if (!strncmp("init", *commandBuf, strlen("init"))){
 
     output[0] = INIT;
-    output[1] = 33;
+    output[1] = parseCommandArguments(*commandBuf);
 
     return output;
   } else if (!strncmp("kill", *commandBuf, strlen("kill"))){
@@ -303,20 +310,20 @@ void *asyncListenTransactions(void *arguments) {
 int parseCommandArguments(char *commandBuf){
 	char *command = commandBuf;
 	char *str_pid;
-	int i = 0, j, pid;
-	while (command[i] != ' '){
-		i++;
+	int last_letter_index = 0, last_number_index, pid;
+	while (command[last_letter_index] != ' '){
+		last_letter_index++;
 	}
-	i++;
-	j = i;
-	while (command[j] != '\0'){
-		j++;
+	last_letter_index++;
+	last_number_index = last_letter_index;
+	while (command[last_number_index] != '\0'){
+		last_number_index++;
 	}
-	str_pid = malloc(sizeof(char)*(j-i+1));
-	for (int k=i; k<j; k++){
-		str_pid[k-i] = command[k];
+	str_pid = malloc(sizeof(char)*(last_number_index-last_letter_index + 1));
+	for (int k = last_letter_index; k < last_number_index; k++){
+		str_pid[k - last_letter_index] = command[k];
 	}
-	str_pid[j] = '\0';
+	str_pid[last_number_index] = '\0';
 
 	pid = atoi(str_pid);
 	free(str_pid);
