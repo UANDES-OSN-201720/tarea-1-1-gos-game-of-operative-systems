@@ -199,6 +199,9 @@ int* splitCommand(char** commandBuf){
 
     output[0] = INIT;
     output[1] = parseCommandArguments(*commandBuf);
+    if (output[1] <= 0){
+      output[1] = 1000;
+    }
 
     return output;
   } else if (!strncmp("kill", *commandBuf, strlen("kill"))){
@@ -329,8 +332,8 @@ int parseCommandArguments(char *commandBuf){
   	number = atoi(str_number);
 
   	free(str_number);
-  } else {
-    number = 1000;
-  }
+    } else {
+      number = -1;
+    }
 	return number;
 }
