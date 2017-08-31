@@ -47,13 +47,13 @@ int main(int argc, char** argv) {
   pipe(toBankPipe);
 
   int* childPipes[128];
-  int childPipesCounter = 0;
+  int childPipesIndex = 0;
 
   const int bankId = getpid();
   printf("Bienvenido a Banco '%d'\n", bankId);
 
   struct arg_struct args;
-  args.arg1 = &childPipesCounter;
+  args.arg1 = &childPipesIndex;
   args.arg2 = toBankPipe;
   args.arg4 = childPipes;
 
@@ -73,8 +73,6 @@ int main(int argc, char** argv) {
 
     int* command = splitCommand(&commandBuf);
 
-    printf("Comando ingresado: '%d'\n", command[0]);
-
     if (command[0] == QUIT) {
         for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
           int childPID = pidArray[sucIndex];
@@ -82,7 +80,8 @@ int main(int argc, char** argv) {
         }
         break;
 
-    } else if (command[0] == LIST) {  printf("Lista de sucursales: \n");
+    } else if (command[0] == LIST) {
+      printf("Lista de sucursales: \n");
       for (int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
         printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex]);
         // TODO: Missing accounts amount for every office.
@@ -99,20 +98,16 @@ int main(int argc, char** argv) {
           pidArrayCounter = pidArrayCounter -1;
         }
       }
-      
+
       printf("Sucursal %d cerrada\n", childPID);
     } else if (command[0] == INIT) {
-      // OJO: Llamar a fork dentro de un ciclo
-      // es potencialmente peligroso, dado que accidentalmente
-      // pueden iniciarse procesos sin control.
-      // Buscar en Google "fork bomb"
 
-      //Create pipe
+      //Create parent to child pipe
       int toChildPipe[2];
       pipe(toChildPipe);
 
-      childPipes[childPipesCounter] = toChildPipe;
-      childPipesCounter = childPipesCounter + 1;
+      childPipes[childPipesIndex] = toChildPipe;
+      childPipesIndex = childPipesIndex + 1;
 
       pid_t sucid = fork();
 
@@ -133,7 +128,6 @@ int main(int argc, char** argv) {
         accountsArray[0] = 10;
 
         struct arg_struct args;
-        args.arg1 = &officeId;
         args.arg2 = toBankPipe;
         args.arg3 = toChildPipe;
 
@@ -185,8 +179,6 @@ int main(int argc, char** argv) {
 }
 
 int* splitCommand(char** commandBuf){
-  printf("Comando a hacer split '%s'\n", *commandBuf);
-
   static int output[2];
 
   if (!strncmp("quit", *commandBuf, strlen("quit"))){
@@ -256,7 +248,7 @@ void killChild(int pid){
 
 void *asyncTransactionBroadcast(void *arguments){
     struct arg_struct *args = arguments;
-    int *childPipesCounter = args -> arg1;
+    int *childPipesIndex = args -> arg1;
     int* toBankPipe = args -> arg2;
     int** toChildPipes = args -> arg4;
 
@@ -267,9 +259,9 @@ void *asyncTransactionBroadcast(void *arguments){
         read(toBankPipe[READ], readbuffer, sizeof(readbuffer));
 
         // printf("CENTRAL: Received broadcast '%s'\n", readbuffer);
-        for (int pipe = 0; pipe < *childPipesCounter; pipe++){
+        for (int pipe = 0; pipe < *childPipesIndex; pipe++){
 
-            printf("Broadcasting to '%p'.\n", (void*)&toChildPipes[pipe]);
+            printf("CENTRAL: Broadcasting to '%p'.\n", (void*)&toChildPipes[pipe]);
             write(toChildPipes[pipe][WRITE], readbuffer, sizeof(readbuffer));
         }
     }
@@ -284,7 +276,7 @@ void *asyncPostTransaction(void *arguments) {
   while(true){
       char msg[] = "Message from child process and request thread.";
       write(toBankPipe[WRITE], msg, (strlen(msg) + 1));
-      sleep(2);
+      sleep(10);
   }
 }
 
@@ -303,7 +295,6 @@ void *asyncListenTransactions(void *arguments) {
       printf("CHILD %d: pipe address '%p'\n", officePID, (void*)&toChildPipe);
       printf("CHILD %d: Received broadcast '%s'\n", officePID, readbuffer);
       printf("CHILD %d: Should post response to '%p'\n", officePID, (void*)&toBankPipe);
-      sleep(1);
     }
 }
 
