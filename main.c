@@ -267,6 +267,8 @@ void *asyncTransactionBroadcast(void *arguments){
 
         // printf("CENTRAL: Received broadcast '%s'\n", readbuffer);
         for (int pipe = 0; pipe < *childPipesCounter; pipe++){
+
+            printf("Broadcasting to '%p'.\n", (void*)&toChildPipes[pipe]);
             write(toChildPipes[pipe][WRITE], readbuffer, sizeof(readbuffer));
         }
     }
@@ -274,13 +276,11 @@ void *asyncTransactionBroadcast(void *arguments){
 
 void *asyncPostTransaction(void *arguments) {
   struct arg_struct *args = arguments;
-  int *officePID = args -> arg1;
+  int officePID = getpid();
   int* toBankPipe = args -> arg2;
 
-  printf("CHILD '%d': Async transaction post initiated.\n", *officePID);
+  printf("CHILD '%d': Async transaction post initiated.\n", officePID);
   while(true){
-      printf("CHILD '%d': Posting...\n", *officePID);
-
       char msg[] = "Message from child process and request thread.";
       write(toBankPipe[WRITE], msg, (strlen(msg) + 1));
       sleep(2);
@@ -289,17 +289,19 @@ void *asyncPostTransaction(void *arguments) {
 
 void *asyncListenTransactions(void *arguments) {
     struct arg_struct *args = arguments;
-    int *officePID = args -> arg1;
+    int officePID = getpid();
+    int* toBankPipe = args -> arg2;
     int* toChildPipe = args -> arg3;
 
-    printf("%p\n",(void*)&toChildPipe);
-
-    printf("Async transaction listening initiated from pid: '%d'\n", *officePID);
+    printf("CHILD %d: Async transaction listening initiated\n", officePID);
     while(true){
 
       char readbuffer[80];
       read(toChildPipe[READ], readbuffer, sizeof(readbuffer));
-      printf("CHILD %d: Received broadcast '%s'\n", *officePID, readbuffer);
+
+      printf("CHILD %d: pipe address '%p'\n", officePID, (void*)&toChildPipe);
+      printf("CHILD %d: Received broadcast '%s'\n", officePID, readbuffer);
+      printf("CHILD %d: Should post response to '%p'\n", officePID, (void*)&toBankPipe);
       sleep(1);
     }
 }
