@@ -20,9 +20,9 @@ const int READ = 0;
 const int WRITE = 1;
 
 int* splitCommand(char** commandBuf);
+int parseCommandArguments(char *commandBuf);
+void killOffice(int officeId,int **pidArray,int *pidArrayCounter);
 void killChild(int pid);
-
-int parseCommandArguments(char *string);
 void *asyncTransactionBroadcast(void *argunemts);
 void *asyncPostTransaction(void *arguments);
 void *asyncListenTransactions(void *arguments);
@@ -37,8 +37,10 @@ struct arg_struct {
 int main(int argc, char** argv) {
   size_t bufsize = 512;
   char* commandBuf = malloc(sizeof(char)*bufsize);
-  int pidArray[128];
+  int *pidArray;
   int pidArrayCounter = 0;
+  pidArray = malloc(sizeof(int)*128);
+
 
   // Para guardar descriptores de pipe
   // el elemento 0 es para lectura
@@ -89,18 +91,10 @@ int main(int argc, char** argv) {
       }
 
     } else if (command[0] == KILL) {
-      int childPID = command[1];
-      killChild(childPID);
-
-      for (int i = 0; i < pidArrayCounter; i++){
-        if (pidArray[i] == childPID){
-          pidArray[i] = pidArray[pidArrayCounter];
-          pidArrayCounter = pidArrayCounter -1;
-        }
+      killOffice(command[1], &pidArray, &pidArrayCounter);
       }
 
-      printf("Sucursal %d cerrada\n", childPID);
-    } else if (command[0] == INIT) {
+     else if (command[0] == INIT) {
 
       //Create parent to child pipe
       int toChildPipe[2];
@@ -175,63 +169,97 @@ int main(int argc, char** argv) {
 
   printf("Terminando ejecucion limpiamente...\n");
 
+  free(pidArray);
+
   return(EXIT_SUCCESS);
 }
 
 int* splitCommand(char** commandBuf){
-  static int output[2];
+  static int output[] = {-1, -1};
+  output[1] = parseCommandArguments(*commandBuf);
 
   if (!strncmp("quit", *commandBuf, strlen("quit"))){
 
     output[0] = QUIT;
-    output[1] = 33;
 
-    return output;
   } else if (!strncmp("init", *commandBuf, strlen("init"))){
 
     output[0] = INIT;
-    output[1] = parseCommandArguments(*commandBuf);
+
     if (output[1] <= 0){
       output[1] = 1000;
     }
 
-    return output;
   } else if (!strncmp("kill", *commandBuf, strlen("kill"))){
 
     output[0] = KILL;
-    output[1] = parseCommandArguments(*commandBuf);
 
-    return output;
   } else if (!strncmp("list", *commandBuf, strlen("list"))){
 
     output[0] = LIST;
-    output[1] = 33;
 
-    return output;
   } else if (!strncmp("dump", *commandBuf, strlen("dump"))){
 
     output[0] = DUMP;
-    output[1] = parseCommandArguments(*commandBuf);
 
-    return output;
   } else if (!strncmp("dump_accs", *commandBuf, strlen("dump_accs"))){
 
     output[0] = DUMP_ACCS;
-    output[1] = parseCommandArguments(*commandBuf);
 
-    return output;
   } else if (!strncmp("dump_errs", *commandBuf, strlen("dump_errs"))){
 
     output[0] = DUMP_ERRS;
-    output[1] = parseCommandArguments(*commandBuf);
-
-    return output;
   }
 
-  output[0] = -1;
-  output[1] = -1;
-
   return output;
+}
+
+int parseCommandArguments(char *commandBuf){
+	char *command = commandBuf;
+	char *str_number;
+	int last_letter_index = 0, last_number_index, number;
+	while (command[last_letter_index] != ' ' && command[last_letter_index] != '\0'){
+		last_letter_index++;
+	}
+	last_letter_index++;
+  if (command[last_letter_index] != '\0'){
+    last_number_index = last_letter_index;
+  	while (command[last_number_index] != '\0'){
+  		last_number_index++;
+
+  	}
+    str_number = malloc(sizeof(char)*(last_number_index-last_letter_index + 1));
+  	for (int k = last_letter_index; k < last_number_index; k++){
+  		str_number[k - last_letter_index] = command[k];
+  	}
+  	str_number[last_number_index] = '\0';
+
+  	number = atoi(str_number);
+
+  	free(str_number);
+    } else {
+      number = -1;
+    }
+	return number;
+}
+
+void killOffice(int officeId,int **pidArray,int *pidArrayCounter ){
+  int childPID = officeId;
+  int *pids = *pidArray;
+  killChild(childPID);
+  for (int i = 0; i < *pidArrayCounter; i++){
+    if (pids[i] == childPID){
+      printf("%d\n", pids[i]);
+      printf("%d %d\n", *pidArrayCounter,pids[*pidArrayCounter - 1]);
+      pids[i] = pids[*pidArrayCounter - 1];
+
+      printf("%d\n", pids[i]);
+      *pidArrayCounter -= 1;
+    }
+  }
+  *pidArray = pids;
+  printf("%d\n", *pidArrayCounter);
+  printf("Sucursal %d cerrada\n", childPID);
 }
 
 void killChild(int pid){
@@ -298,33 +326,4 @@ void *asyncListenTransactions(void *arguments) {
       printf("CHILD %d: Received broadcast '%s'\n", officePID, readbuffer);
       printf("CHILD %d: Should post response to '%p'\n", officePID, (void*)&toBankPipe);
     }
-}
-
-int parseCommandArguments(char *commandBuf){
-	char *command = commandBuf;
-	char *str_number;
-	int last_letter_index = 0, last_number_index, number;
-	while (command[last_letter_index] != ' ' && command[last_letter_index] != '\0'){
-		last_letter_index++;
-	}
-	last_letter_index++;
-  if (command[last_letter_index] != '\0'){
-    last_number_index = last_letter_index;
-  	while (command[last_number_index] != '\0'){
-  		last_number_index++;
-
-  	}
-    str_number = malloc(sizeof(char)*(last_number_index-last_letter_index + 1));
-  	for (int k = last_letter_index; k < last_number_index; k++){
-  		str_number[k - last_letter_index] = command[k];
-  	}
-  	str_number[last_number_index] = '\0';
-
-  	number = atoi(str_number);
-
-  	free(str_number);
-    } else {
-      number = -1;
-    }
-	return number;
 }
