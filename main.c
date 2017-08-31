@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
           pidArrayCounter = pidArrayCounter -1;
         }
       }
-      
+
       printf("Sucursal %d cerrada\n", childPID);
     } else if (command[0] == INIT) {
       // OJO: Llamar a fork dentro de un ciclo
@@ -216,7 +216,6 @@ int* splitCommand(char** commandBuf){
   } else if (!strncmp("dump", *commandBuf, strlen("dump"))){
 
     output[0] = DUMP;
-
     output[1] = parseCommandArguments(*commandBuf);
 
     return output;
@@ -307,24 +306,29 @@ void *asyncListenTransactions(void *arguments) {
 
 int parseCommandArguments(char *commandBuf){
 	char *command = commandBuf;
-	char *str_pid;
-	int last_letter_index = 0, last_number_index, pid;
-	while (command[last_letter_index] != ' '){
+	char *str_number;
+	int last_letter_index = 0, last_number_index, number;
+	while (command[last_letter_index] != ' ' && command[last_letter_index] != '\0'){
 		last_letter_index++;
 	}
 	last_letter_index++;
-	last_number_index = last_letter_index;
-	while (command[last_number_index] != '\0'){
-		last_number_index++;
-	}
-	str_pid = malloc(sizeof(char)*(last_number_index-last_letter_index + 1));
-	for (int k = last_letter_index; k < last_number_index; k++){
-		str_pid[k - last_letter_index] = command[k];
-	}
-	str_pid[last_number_index] = '\0';
+  if (command[last_letter_index] != '\0'){
+    last_number_index = last_letter_index;
+  	while (command[last_number_index] != '\0'){
+  		last_number_index++;
 
-	pid = atoi(str_pid);
-	free(str_pid);
+  	}
+    str_number = malloc(sizeof(char)*(last_number_index-last_letter_index + 1));
+  	for (int k = last_letter_index; k < last_number_index; k++){
+  		str_number[k - last_letter_index] = command[k];
+  	}
+  	str_number[last_number_index] = '\0';
 
-	return pid;
+  	number = atoi(str_number);
+
+  	free(str_number);
+  } else {
+    number = 1000;
+  }
+	return number;
 }
