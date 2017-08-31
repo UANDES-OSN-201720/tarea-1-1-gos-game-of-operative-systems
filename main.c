@@ -40,12 +40,7 @@ struct arg_struct {
 int main(int argc, char** argv) {
   size_t bufsize = 512;
   char* commandBuf = malloc(sizeof(char)*bufsize);
-<<<<<<< HEAD
-
-  int pidArray[TOTAL_OFFICES];
-=======
   int *pidArray;
->>>>>>> d9c4427b03889a5410c9d847e1bd1d8f6004550b
   int pidArrayCounter = 0;
   pidArray = malloc(sizeof(int)*128);
 
