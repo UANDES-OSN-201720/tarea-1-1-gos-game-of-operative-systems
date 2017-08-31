@@ -22,6 +22,7 @@ const int WRITE = 1;
 int* splitCommand(char** commandBuf);
 void killChild(int pid);
 
+int parseCommandArguments(char *string);
 void *asyncTransactionBroadcast(void *argunemts);
 void *asyncPostTransaction(void *arguments);
 void *asyncListenTransactions(void *arguments);
@@ -75,7 +76,13 @@ int main(int argc, char** argv) {
     printf("Comando ingresado: '%d'\n", command[0]);
 
     if (command[0] == QUIT) {
-      printf("Lista de sucursales: \n");
+        for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
+          int childPID = pidArray[sucIndex];
+          killChild(childPID);
+        }
+        break;
+
+    } else if (command[0] == LIST) {  printf("Lista de sucursales: \n");
       for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
         printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex]);
         // TODO: Missing accounts amount for every office.
@@ -86,6 +93,7 @@ int main(int argc, char** argv) {
       int childPID = command[1];
       killChild(childPID);
 
+      printf("Sucursal %lu cerrada\n", childPID);
     } else if (command[0] == INIT) {
       // OJO: Llamar a fork dentro de un ciclo
       // es potencialmente peligroso, dado que accidentalmente
@@ -171,6 +179,7 @@ int main(int argc, char** argv) {
 
 int* splitCommand(char** commandBuf){
   printf("Comando a hacer split '%s'\n", *commandBuf);
+
   static int output[2];
 
   if (!strncmp("quit", *commandBuf, strlen("quit"))){
@@ -188,7 +197,7 @@ int* splitCommand(char** commandBuf){
   } else if (!strncmp("kill", *commandBuf, strlen("kill"))){
 
     output[0] = KILL;
-    output[1] = 33;
+    output[1] = parseCommandArguments(*commandBuf);
 
     return output;
   } else if (!strncmp("list", *commandBuf, strlen("list"))){
@@ -200,19 +209,20 @@ int* splitCommand(char** commandBuf){
   } else if (!strncmp("dump", *commandBuf, strlen("dump"))){
 
     output[0] = DUMP;
-    output[1] = 33;
+
+    output[1] = parseCommandArguments(*commandBuf);
 
     return output;
   } else if (!strncmp("dump_accs", *commandBuf, strlen("dump_accs"))){
 
     output[0] = DUMP_ACCS;
-    output[1] = 33;
+    output[1] = parseCommandArguments(*commandBuf);
 
     return output;
   } else if (!strncmp("dump_errs", *commandBuf, strlen("dump_errs"))){
 
     output[0] = DUMP_ERRS;
-    output[1] = 33;
+    output[1] = parseCommandArguments(*commandBuf);
 
     return output;
   }
@@ -286,4 +296,28 @@ void *asyncListenTransactions(void *arguments) {
       printf("CHILD %d: Received broadcast '%s'\n", *officePID, readbuffer);
       sleep(1);
     }
+}
+
+int parseCommandArguments(char *commandBuf){
+	char *command = commandBuf;
+	char *str_pid;
+	int i = 0, j, pid;
+	while (command[i] != ' '){
+		i++;
+	}
+	i++;
+	j = i;
+	while (command[j] != '\0'){
+		j++;
+	}
+	str_pid = malloc(sizeof(char)*(j-i+1));
+	for (int k=i; k<j; k++){
+		str_pid[k-i] = command[k];
+	}
+	str_pid[j] = '\0';
+
+	pid = atoi(str_pid);
+	free(str_pid);
+
+	return pid;
 }
