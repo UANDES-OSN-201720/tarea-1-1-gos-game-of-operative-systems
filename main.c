@@ -19,6 +19,8 @@ const int DUMP_ERRS = 6;
 const int READ = 0;
 const int WRITE = 1;
 
+const int TOTAL_OFFICES = 128;
+
 int* splitCommand(char** commandBuf);
 void killChild(int pid);
 
@@ -26,34 +28,37 @@ int parseCommandArguments(char *string);
 void *asyncTransactionBroadcast(void *argunemts);
 void *asyncPostTransaction(void *arguments);
 void *asyncListenTransactions(void *arguments);
+char* generateMessage(int pid);
 
 struct arg_struct {
     int *arg1;
-    int* arg2;
-    int* arg3;
-    int** arg4;
+    int *arg2;
+    int *arg3;
+    int **arg4;
 };
 
 int main(int argc, char** argv) {
   size_t bufsize = 512;
   char* commandBuf = malloc(sizeof(char)*bufsize);
-  int pidArray[128];
+
+  int pidArray[TOTAL_OFFICES];
   int pidArrayCounter = 0;
 
-  // Para guardar descriptores de pipe
-  // el elemento 0 es para lectura
-  // y el elemento 1 es para escritura.
   int toBankPipe[2];
   pipe(toBankPipe);
 
-  int* childPipes[128];
-  int childPipesIndex = 0;
+  // Initialize all child pipes
+  int** childPipes = malloc(sizeof(int*) * TOTAL_OFFICES);
+  for( int pipe = 0; pipe < TOTAL_OFFICES; pipe++) {
+      childPipes[pipe] = malloc(sizeof(int) * 2);
+  }
+  int currentChild = 0;
 
   const int bankId = getpid();
   printf("Bienvenido a Banco '%d'\n", bankId);
 
   struct arg_struct args;
-  args.arg1 = &childPipesIndex;
+  args.arg1 = &currentChild;
   args.arg2 = toBankPipe;
   args.arg4 = childPipes;
 
@@ -103,11 +108,8 @@ int main(int argc, char** argv) {
     } else if (command[0] == INIT) {
 
       //Create parent to child pipe
-      int toChildPipe[2];
-      pipe(toChildPipe);
-
-      childPipes[childPipesIndex] = toChildPipe;
-      childPipesIndex = childPipesIndex + 1;
+      pipe(childPipes[currentChild]);
+      currentChild = currentChild + 1;
 
       pid_t sucid = fork();
 
@@ -129,7 +131,7 @@ int main(int argc, char** argv) {
 
         struct arg_struct args;
         args.arg2 = toBankPipe;
-        args.arg3 = toChildPipe;
+        args.arg3 = childPipes[currentChild - 1];
 
         // Create transactionRequest thread
         pthread_t transactionRequestThread;
@@ -254,7 +256,6 @@ void *asyncTransactionBroadcast(void *arguments){
     int* toBankPipe = args -> arg2;
     int** toChildPipes = args -> arg4;
 
-
     printf("CENTRAL: Async transaction broadcast initiated.\n");
     while(true){
         char readbuffer[80];
@@ -276,10 +277,17 @@ void *asyncPostTransaction(void *arguments) {
 
   printf("CHILD '%d': Async transaction post initiated.\n", officePID);
   while(true){
-      char msg[] = "Message from child process and request thread.";
+      char* msg = generateMessage(officePID);
       write(toBankPipe[WRITE], msg, (strlen(msg) + 1));
       sleep(10);
   }
+}
+
+char* generateMessage(int pid) {
+    char *message = malloc(sizeof(char) * 20);
+    sprintf(message, "posting from '%d'", pid);
+
+    return message;
 }
 
 void *asyncListenTransactions(void *arguments) {
@@ -294,7 +302,6 @@ void *asyncListenTransactions(void *arguments) {
       char readbuffer[80];
       read(toChildPipe[READ], readbuffer, sizeof(readbuffer));
 
-      printf("CHILD %d: pipe address '%p'\n", officePID, (void*)&toChildPipe);
       printf("CHILD %d: Received broadcast '%s'\n", officePID, readbuffer);
       printf("CHILD %d: Should post response to '%p'\n", officePID, (void*)&toBankPipe);
     }
