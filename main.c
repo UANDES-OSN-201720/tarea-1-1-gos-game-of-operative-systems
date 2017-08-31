@@ -1,3 +1,4 @@
+#include <signal.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
@@ -6,13 +7,7 @@
 #include <sys/types.h>
 #include <pthread.h>
 
-// Cuenten con este codigo monolitico en una funcion
-// main como punto de partida.
-// Idealmente, el codigo del programa deberia estar
-// adecuadamente modularizado en distintas funciones,
-// e incluso en archivos separados, con dependencias
-// distribuidas en headers. Pueden modificar el Makefile
-// libremente para lograr esto.
+
 const int QUIT = 0;
 const int INIT = 1;
 const int KILL = 2;
@@ -21,93 +16,122 @@ const int DUMP = 4;
 const int DUMP_ACCS = 5;
 const int DUMP_ERRS = 6;
 
+const int READ = 0;
+const int WRITE = 1;
+
 int* splitCommand(char** commandBuf);
 void killChild(int pid);
 
-void *asyncRequestTransaction(void *voidOfficePID);
-void *asyncResponseTransaction(void *voidOfficePID);
+void *asyncTransactionBroadcast(void *argunemts);
+void *asyncPostTransaction(void *arguments);
+void *asyncListenTransactions(void *arguments);
+
+struct arg_struct {
+    int *arg1;
+    int* arg2;
+    int* arg3;
+    int** arg4;
+};
 
 int main(int argc, char** argv) {
   size_t bufsize = 512;
   char* commandBuf = malloc(sizeof(char)*bufsize);
-  int pidArray[10];
+  int pidArray[128];
   int pidArrayCounter = 0;
+
   // Para guardar descriptores de pipe
   // el elemento 0 es para lectura
   // y el elemento 1 es para escritura.
-  int bankPipe[2];
-  char readbuffer[80]; // buffer para lectura desde pipe
-  
-  // Se crea un pipe...
-  pipe(bankPipe);
-  
-  const int bankId = getpid() % 1000;
+  int toBankPipe[2];
+  pipe(toBankPipe);
+
+  int* childPipes[128];
+  int childPipesCounter = 0;
+
+  const int bankId = getpid();
   printf("Bienvenido a Banco '%d'\n", bankId);
-  
+
+  struct arg_struct args;
+  args.arg1 = &childPipesCounter;
+  args.arg2 = toBankPipe;
+  args.arg4 = childPipes;
+
+  // Thread for reading toBankPipe and broadcast the message to every child pipe
+  pthread_t transactionBroadcastThread;
+  int transactionsBroadcastDisabled = pthread_create(&transactionBroadcastThread, NULL, asyncTransactionBroadcast, &args);
+  if (transactionsBroadcastDisabled){
+    printf("Error creating transaction broadcast thread. Consider killing the program.\n");
+  }
+
   while (true) {
     printf(">>");
     getline(&commandBuf, &bufsize, stdin);
-    
+
     // Manera de eliminar el \n leido por getline
     commandBuf[strlen(commandBuf)-1] = '\0';
-    
+
     int* command = splitCommand(&commandBuf);
-    
+
     printf("Comando ingresado: '%d'\n", command[0]);
-    
+
     if (command[0] == QUIT) {
-      for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
-        int childPID = pidArray[sucIndex];
-        killChild(childPID);
-      }
-      break;
-      
-    } else if (command[0] == LIST) {
       printf("Lista de sucursales: \n");
       for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
         printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex]);
         // TODO: Missing accounts amount for every office.
-        
+
       }
-      
+
     } else if (command[0] == KILL) {
       int childPID = command[1];
       killChild(childPID);
-      
+
     } else if (command[0] == INIT) {
       // OJO: Llamar a fork dentro de un ciclo
       // es potencialmente peligroso, dado que accidentalmente
       // pueden iniciarse procesos sin control.
       // Buscar en Google "fork bomb"
+
+      //Create pipe
+      int toChildPipe[2];
+      pipe(toChildPipe);
+
+      childPipes[childPipesCounter] = toChildPipe;
+      childPipesCounter = childPipesCounter + 1;
+
       pid_t sucid = fork();
-      
+
       if (sucid > 0) {
         printf("Sucursal creada con ID '%d'\n", sucid);
-        
+
         pidArray[pidArrayCounter] = sucid;
         pidArrayCounter = pidArrayCounter + 1;
-        
-        // Enviando saludo a la sucursal
-        char msg[] = "Hola sucursal, como estas?";
-        write(bankPipe[1], msg, (strlen(msg)+1));
-        
+
         continue;
       } else if (!sucid) {
+
         int officeId = getpid();
         int accountAmount = command[1];
         int accountsArray[accountAmount];
-        int* availableOffices[128];
+
+        printf("Sucursal '%d' creada.\n", officeId);
+        accountsArray[0] = 10;
+
+        struct arg_struct args;
+        args.arg1 = &officeId;
+        args.arg2 = toBankPipe;
+        args.arg3 = toChildPipe;
 
         // Create transactionRequest thread
         pthread_t transactionRequestThread;
-        int transactionsRequestsDisabled = pthread_create(&transactionRequestThread, NULL, asyncRequestTransaction, &officeId);
+        int transactionsRequestsDisabled = pthread_create(&transactionRequestThread, NULL, asyncPostTransaction, &args);
         if (transactionsRequestsDisabled){
           printf("Error creating transactions request thread. Consider killing the office.\n");
         }
 
         // Create transactionResponse thread
         pthread_t transactionResponseThread;
-        int transactionsResponsesDisabled = pthread_create(&transactionResponseThread, NULL, asyncResponseTransaction, &officeId);
+        int transactionsResponsesDisabled = pthread_create(&transactionResponseThread, NULL, asyncListenTransactions, &args);
         if (transactionsResponsesDisabled){
           printf("Error creating transactions response thread. Consider killing the office.\n");
         }
@@ -115,32 +139,24 @@ int main(int argc, char** argv) {
         // This while prevents the process from being killed
         while(true){
         }
-        
-        printf("Hola, soy la sucursal '%d'\n", officeId);
-
-        int bytes = read(bankPipe[0], readbuffer, sizeof(readbuffer));
-        printf("Soy la sucursal '%d' y me llego mensaje '%s' de '%d' bytes.\n",
-               officeId, readbuffer, bytes);
-        // Cerrar lado de lectura del pipe
-        close(bankPipe[0]);
 
         _exit(EXIT_SUCCESS);
-        
+
       } else {
         fprintf(stderr, "Error al crear proceso de sucursal!\n");
         return (EXIT_FAILURE);
 
       }
     } else if (command[0] == DUMP) {
-      int childPID = command[1];
+      //int childPID = command[1];
       // TODO: Generate transactions CSV
 
     }  else if (command[0] == DUMP_ACCS) {
-      int childPID = command[1];
+      //int childPID = command[1];
       // TODO: Generate accounts statuses CSV
 
     }  else if (command[0] == DUMP_ERRS) {
-      int childPID = command[1];
+      //int childPID = command[1];
       // TODO: Generate transactions errors CSV
 
     } else {
@@ -149,8 +165,6 @@ int main(int argc, char** argv) {
   }
 
   printf("Terminando ejecucion limpiamente...\n");
-  // Cerrar lado de escritura del pipe
-  close(bankPipe[1]);
 
   return(EXIT_SUCCESS);
 }
@@ -216,7 +230,6 @@ void killChild(int pid){
   bool died = false;
   for (int loop = 0; !died && loop < 5; loop++){
     int status;
-    pid_t id;
     sleep(1);
     if (waitpid(pid, &status, WNOHANG) == pid) died = true;
   }
@@ -224,20 +237,53 @@ void killChild(int pid){
   if (!died) kill(pid, SIGKILL);
 }
 
-void *asyncRequestTransaction(void *voidOfficePID) {
-  int *officePID = voidOfficePID;
+void *asyncTransactionBroadcast(void *arguments){
+    struct arg_struct *args = arguments;
+    int *childPipesCounter = args -> arg1;
+    int* toBankPipe = args -> arg2;
+    int** toChildPipes = args -> arg4;
 
+
+    printf("CENTRAL: Async transaction broadcast initiated.\n");
+    while(true){
+        char readbuffer[80];
+        read(toBankPipe[READ], readbuffer, sizeof(readbuffer));
+
+        // printf("CENTRAL: Received broadcast '%s'\n", readbuffer);
+        for (int pipe = 0; pipe < *childPipesCounter; pipe++){
+            write(toChildPipes[pipe][WRITE], readbuffer, sizeof(readbuffer));
+        }
+    }
+}
+
+void *asyncPostTransaction(void *arguments) {
+  struct arg_struct *args = arguments;
+  int *officePID = args -> arg1;
+  int* toBankPipe = args -> arg2;
+
+  printf("CHILD '%d': Async transaction post initiated.\n", *officePID);
   while(true){
-    printf("Async transaction request initiated from pid: '%d'\n", *officePID);
-    sleep(1);
+      printf("CHILD '%d': Posting...\n", *officePID);
+
+      char msg[] = "Message from child process and request thread.";
+      write(toBankPipe[WRITE], msg, (strlen(msg) + 1));
+      sleep(2);
   }
 }
 
-void *asyncResponseTransaction(void *voidOfficePID) {
-    int *officePID = voidOfficePID;
+void *asyncListenTransactions(void *arguments) {
+    struct arg_struct *args = arguments;
+    int *officePID = args -> arg1;
+    int* toChildPipe = args -> arg3;
 
+    printf("%p\n",(void*)&toChildPipe);
+
+    printf("Async transaction listening initiated from pid: '%d'\n", *officePID);
     while(true){
-      printf("Async transaction response initiated from pid: '%d'\n", *officePID);
+
+      char readbuffer[80];
+      read(toChildPipe[READ], readbuffer, sizeof(readbuffer));
+      printf("CHILD %d: Received broadcast '%s'\n", *officePID, readbuffer);
       sleep(1);
     }
 }
