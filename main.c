@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
         break;
 
     } else if (command[0] == LIST) {  printf("Lista de sucursales: \n");
-      for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
+      for (int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
         printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex]);
         // TODO: Missing accounts amount for every office.
 
@@ -93,7 +93,14 @@ int main(int argc, char** argv) {
       int childPID = command[1];
       killChild(childPID);
 
-      printf("Sucursal %lu cerrada\n", childPID);
+      for (int i = 0; i < pidArrayCounter; i++){
+        if (pidArray[i] == childPID){
+          pidArray[i] = pidArray[pidArrayCounter];
+          pidArrayCounter = pidArrayCounter -1;
+        }
+      }
+      
+      printf("Sucursal %d cerrada\n", childPID);
     } else if (command[0] == INIT) {
       // OJO: Llamar a fork dentro de un ciclo
       // es potencialmente peligroso, dado que accidentalmente
@@ -191,7 +198,7 @@ int* splitCommand(char** commandBuf){
   } else if (!strncmp("init", *commandBuf, strlen("init"))){
 
     output[0] = INIT;
-    output[1] = 33;
+    output[1] = parseCommandArguments(*commandBuf);
 
     return output;
   } else if (!strncmp("kill", *commandBuf, strlen("kill"))){
