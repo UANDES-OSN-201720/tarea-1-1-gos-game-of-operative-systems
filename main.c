@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
             }
 
         } else if (command[0] == KILL) {
-            killOffice(command[1], &pidArray, &pidArrayCounter);
+            killOffice(command[1], pidArray, &pidArrayCounter);
 
         } else if (command[0] == INIT) {
 
@@ -242,21 +242,20 @@ int parseCommandArguments(char *commandBuf){
     return number;
 }
 
-void killOffice(int officeId,int **pidArray,int *pidArrayCounter ){
+void killOffice(int officeId,int *pidArray,int *pidArrayCounter ){
     int childPID = officeId;
-    int *pids = *pidArray;
     killChild(childPID);
-    for (int i = 0; i < *pidArrayCounter; i++){
-        if (pids[i] == childPID){
-            printf("%d\n", pids[i]);
-            printf("%d %d\n", *pidArrayCounter,pids[*pidArrayCounter - 1]);
-            pids[i] = pids[*pidArrayCounter - 1];
 
-            printf("%d\n", pids[i]);
+    for (int i = 0; i < *pidArrayCounter; i++){
+        if (pidArray[i] == childPID){
+            printf("%d\n", pidArray[i]);
+            printf("%d %d\n", *pidArrayCounter, pidArray[*pidArrayCounter - 1]);
+            pidArray[i] = pidArray[*pidArrayCounter - 1];
+
+            printf("%d\n", pidArray[i]);
             *pidArrayCounter -= 1;
         }
     }
-    *pidArray = pids;
     printf("%d\n", *pidArrayCounter);
     printf("Sucursal %d cerrada\n", childPID);
 }
