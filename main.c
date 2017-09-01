@@ -21,6 +21,7 @@ const int WRITE = 1;
 
 const int TOTAL_OFFICES = 128;
 
+int* getCommand();
 int* splitCommand(char** commandBuf);
 int parseCommandArguments(char *commandBuf);
 void killOffice(int officeId,int **pidArray,int *pidArrayCounter);
@@ -38,12 +39,9 @@ struct arg_struct {
 };
 
 int main(int argc, char** argv) {
-    size_t bufsize = 512;
-    char* commandBuf = malloc(sizeof(char)*bufsize);
     int *pidArray;
     int pidArrayCounter = 0;
     pidArray = malloc(sizeof(int)*128);
-
 
     int toBankPipe[2];
     pipe(toBankPipe);
@@ -71,13 +69,7 @@ int main(int argc, char** argv) {
     }
 
     while (true) {
-        printf(">>");
-        getline(&commandBuf, &bufsize, stdin);
-
-        // Manera de eliminar el \n leido por getline
-        commandBuf[strlen(commandBuf)-1] = '\0';
-
-        int* command = splitCommand(&commandBuf);
+        int* command = getCommand();
 
         if (command[0] == QUIT) {
             for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
@@ -171,6 +163,19 @@ int main(int argc, char** argv) {
     free(pidArray);
 
     return(EXIT_SUCCESS);
+}
+
+int* getCommand() {
+    size_t bufsize = 512;
+    char* commandBuf = malloc(sizeof(char)*bufsize);
+
+    printf(">>");
+    getline(&commandBuf, &bufsize, stdin);
+
+    // Manera de eliminar el \n leido por getline
+    commandBuf[strlen(commandBuf)-1] = '\0';
+
+    return splitCommand(&commandBuf);
 }
 
 int* splitCommand(char** commandBuf){
