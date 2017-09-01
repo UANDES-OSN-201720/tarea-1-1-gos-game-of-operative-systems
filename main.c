@@ -284,11 +284,9 @@ void *asyncTransactionBroadcast(void *arguments){
     while(true){
         char readbuffer[80];
         read(toBankPipe[READ], readbuffer, sizeof(readbuffer));
+        printf("CENTRAL: Broadcasting message '%s'\n", readbuffer);
 
-        // printf("CENTRAL: Received broadcast '%s'\n", readbuffer);
         for (int pipe = 0; pipe < *childPipesIndex; pipe++){
-
-            printf("CENTRAL: Broadcasting to '%p'.\n", (void*)&toChildPipes[pipe]);
             write(toChildPipes[pipe][WRITE], readbuffer, sizeof(readbuffer));
         }
     }
@@ -309,7 +307,7 @@ void *asyncPostTransaction(void *arguments) {
 
 char* generateMessage(int pid) {
     char *message = malloc(sizeof(char) * 20);
-    sprintf(message, "posting from '%d'", pid);
+    sprintf(message, "%d", pid);
 
     return message;
 }
@@ -325,7 +323,12 @@ void *asyncListenTransactions(void *arguments) {
         char readbuffer[80];
         read(toChildPipe[READ], readbuffer, sizeof(readbuffer));
 
-        printf("CHILD %d: Received broadcast '%s'\n", officePID, readbuffer);
-        printf("CHILD %d: Should post response to '%p'\n", officePID, (void*)&toBankPipe);
+        char *strPID = generateMessage(officePID);
+
+        int notMyMessage = strncmp(strPID, readbuffer, strlen(strPID));
+        if (notMyMessage) {
+            printf("CHILD %d: Received broadcast message '%s'\n", officePID, readbuffer);
+            printf("CHILD %d: Should post response to '%p'\n", officePID, (void*)&toBankPipe);
+        }
     }
 }
