@@ -63,10 +63,7 @@ int main(int argc, char** argv) {
         int* command = getCommand();
 
         if (command[0] == QUIT) {
-            for(int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
-                int childPID = pidArray[sucIndex];
-                killChild(childPID);
-            }
+            executeQuitCommand(pidArray, &pidArrayCounter);
             break;
 
         } else if (command[0] == LIST) {
@@ -167,6 +164,13 @@ int* getCommand() {
     commandBuf[strlen(commandBuf)-1] = '\0';
 
     return splitCommand(&commandBuf);
+}
+
+void executeQuitCommand(int* pidArray, int *pidArrayCounter){
+    for(int sucIndex = 0; sucIndex < *pidArrayCounter; sucIndex++){
+        int childPID = pidArray[sucIndex];
+        killChild(childPID);
+    }
 }
 
 int* splitCommand(char** commandBuf){

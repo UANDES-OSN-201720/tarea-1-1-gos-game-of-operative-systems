@@ -2,6 +2,7 @@
 #define MAIN
 
 int* getCommand();
+void executeQuitCommand(int* pidArray, int *pidArrayCounter);
 int* splitCommand(char** commandBuf);
 int parseCommandArguments(char *commandBuf);
 void killOffice(int officeId,int **pidArray,int *pidArrayCounter);
