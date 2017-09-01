@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <pthread.h>
+#include "main.h"
 
 
 const int QUIT = 0;
@@ -20,16 +21,6 @@ const int READ = 0;
 const int WRITE = 1;
 
 const int TOTAL_OFFICES = 128;
-
-int* getCommand();
-int* splitCommand(char** commandBuf);
-int parseCommandArguments(char *commandBuf);
-void killOffice(int officeId,int **pidArray,int *pidArrayCounter);
-void killChild(int pid);
-void *asyncTransactionBroadcast(void *argunemts);
-void *asyncPostTransaction(void *arguments);
-void *asyncListenTransactions(void *arguments);
-char* generateMessage(int pid);
 
 struct arg_struct {
     int *arg1;
