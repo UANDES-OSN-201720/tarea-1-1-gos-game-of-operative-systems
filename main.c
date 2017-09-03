@@ -26,41 +26,42 @@ const int TOTAL_OFFICES = 128;
 const int TRANSACTIONS_AMOUNT = 1000;
 
 struct arg_struct {
-    int *arg1;
-    int *arg2;
-    int *arg3;
-    int **arg4;
-    int *accounts;
-    int *errors;
-    int *transactions;
+    int* childsAmount;
+    int* toBankPipe;
+    int* toChildPipe;
+    int** toChildPipes;
+    int** toBankPipes;
+    int* accounts;
+    int* errors;
+    int* transactions;
 };
 
 int main(int argc, char** argv) {
-    int *pidArray;
+    int* pidArray;
     int pidArrayCounter = 0;
-    pidArray = malloc(sizeof(int)*128);
+    pidArray = malloc(sizeof(int) * 128);
 
-    int toBankPipe[2];
-    pipe(toBankPipe);
+    // Initialize all child-bank and bank-child pipes
+    int** toBankPipes = malloc(sizeof(int*) * TOTAL_OFFICES);
+    int** toChildPipes = malloc(sizeof(int*) * TOTAL_OFFICES);
 
-    // Initialize all child pipes
-    int** childPipes = malloc(sizeof(int*) * TOTAL_OFFICES);
     for( int pipe = 0; pipe < TOTAL_OFFICES; pipe++) {
-        childPipes[pipe] = malloc(sizeof(int) * 2);
+        toChildPipes[pipe] = malloc(sizeof(int) * 2);
+        toBankPipes[pipe] = malloc(sizeof(int) * 2);
     }
     int currentChild = 0;
 
     const int bankId = getpid();
     printf("Bienvenido a Banco '%d'\n", bankId);
 
-    struct arg_struct args;
-    args.arg1 = &currentChild;
-    args.arg2 = toBankPipe;
-    args.arg4 = childPipes;
+    struct arg_struct threadArguments;
+    threadArguments.childsAmount = &currentChild;
+    threadArguments.toChildPipes = toChildPipes;
+    threadArguments.toBankPipes = toBankPipes;
 
     // Thread for reading toBankPipe and broadcast the message to every child pipe
     pthread_t transactionBroadcastThread;
-    int transactionsBroadcastDisabled = pthread_create(&transactionBroadcastThread, NULL, asyncTransactionBroadcast, &args);
+    int transactionsBroadcastDisabled = pthread_create(&transactionBroadcastThread, NULL, asyncTransactionBroadcast, &threadArguments);
     if (transactionsBroadcastDisabled){
         printf("Error creating transaction broadcast thread. Consider killing the program.\n");
     }
@@ -83,9 +84,10 @@ int main(int argc, char** argv) {
             killOffice(command[1], pidArray, &pidArrayCounter);
 
         } else if (command[0] == INIT) {
-
+            // Create child to parent pipe
+            pipe(toBankPipes[currentChild]);
             //Create parent to child pipe
-            pipe(childPipes[currentChild]);
+            pipe(toChildPipes[currentChild]);
             currentChild = currentChild + 1;
 
             pid_t sucid = fork();
@@ -119,26 +121,24 @@ int main(int argc, char** argv) {
                 printf("Sucursal '%d' creada.\n", officeId);
                 accountsArray[0] = 1000;
 
-                struct arg_struct args;
-                args.arg1 = accountsArray;
-                //TODO: Change pipe to have unique child-parent pipes
-                args.arg2 = toBankPipe;
-                args.arg3 = childPipes[currentChild - 1];
+                struct arg_struct threadArguments;
+                threadArguments.toBankPipe = toBankPipes[currentChild - 1];
+                threadArguments.toChildPipe = toChildPipes[currentChild - 1];
 
-                args.accounts = accountsArray;
-                args.errors = errorsArray;
-                args.transactions = transactionsArray;
+                threadArguments.accounts = accountsArray;
+                threadArguments.errors = errorsArray;
+                threadArguments.transactions = transactionsArray;
 
                 // Create transactionRequest thread
                 pthread_t transactionRequestThread;
-                int transactionsRequestsDisabled = pthread_create(&transactionRequestThread, NULL, asyncPostTransaction, &args);
+                int transactionsRequestsDisabled = pthread_create(&transactionRequestThread, NULL, asyncPostTransaction, &threadArguments);
                 if (transactionsRequestsDisabled){
                     printf("Error creating transactions request thread. Consider killing the office.\n");
                 }
 
                 // Create transactionResponse thread
                 pthread_t transactionResponseThread;
-                int transactionsResponsesDisabled = pthread_create(&transactionResponseThread, NULL, asyncListenTransactions, &args);
+                int transactionsResponsesDisabled = pthread_create(&transactionResponseThread, NULL, asyncListenTransactions, &threadArguments);
                 if (transactionsResponsesDisabled){
                     printf("Error creating transactions response thread. Consider killing the office.\n");
                 }
@@ -194,7 +194,7 @@ int* getCommand() {
     return splitCommand(&commandBuf);
 }
 
-void executeQuitCommand(int* pidArray, int *pidArrayCounter){
+void executeQuitCommand(int* pidArray, int* pidArrayCounter){
     for(int sucIndex = 0; sucIndex < *pidArrayCounter; sucIndex++){
         int childPID = pidArray[sucIndex];
         killChild(childPID);
@@ -241,9 +241,9 @@ int* splitCommand(char** commandBuf){
     return output;
 }
 
-int parseCommandArguments(char *commandBuf){
-    char *command = commandBuf;
-    char *str_number;
+int parseCommandArguments(char* commandBuf){
+    char* command = commandBuf;
+    char* str_number;
     int last_letter_index = 0, last_number_index, number;
     while (command[last_letter_index] != ' ' && command[last_letter_index] != '\0'){
         last_letter_index++;
@@ -270,7 +270,7 @@ int parseCommandArguments(char *commandBuf){
     return number;
 }
 
-void killOffice(int officeId,int *pidArray,int *pidArrayCounter ){
+void killOffice(int officeId,int* pidArray,int* pidArrayCounter ){
     int childPID = officeId;
     killChild(childPID);
 
@@ -302,28 +302,31 @@ void killChild(int pid){
     if (!died) kill(pid, SIGKILL);
 }
 
-void *asyncTransactionBroadcast(void *arguments){
-    struct arg_struct *args = arguments;
-    int *childPipesIndex = args -> arg1;
-    int* toBankPipe = args -> arg2;
-    int** toChildPipes = args -> arg4;
+void* asyncTransactionBroadcast(void* arguments){
+    struct arg_struct* threadArguments = arguments;
+    int* childsAmount = threadArguments -> childsAmount;
+    int** toChildPipes = threadArguments -> toChildPipes;
+    int** toBankPipes = threadArguments -> toBankPipes;
 
     printf("CENTRAL: Async transaction broadcast initiated.\n");
     while(true){
-        char readbuffer[80];
-        read(toBankPipe[READ], readbuffer, sizeof(readbuffer));
-        printf("\nCENTRAL: Broadcasting message '%s'\n", readbuffer);
+        // TODO: Consider making it async
+        for (int toBankPipe = 0; toBankPipe < *childsAmount; toBankPipe++) {
+            char readbuffer[80];
+            read(toBankPipes[toBankPipe][READ], readbuffer, sizeof(readbuffer));
+            printf("\nCENTRAL: Broadcasting message '%s'\n", readbuffer);
 
-        for (int pipe = 0; pipe < *childPipesIndex; pipe++){
-            write(toChildPipes[pipe][WRITE], readbuffer, sizeof(readbuffer));
+            for (int pipe = 0; pipe < *childsAmount; pipe++){
+                write(toChildPipes[pipe][WRITE], readbuffer, sizeof(readbuffer));
+            }
         }
     }
 }
 
-void *asyncPostTransaction(void *arguments) {
-    struct arg_struct *args = arguments;
+void* asyncPostTransaction(void* arguments) {
+    struct arg_struct* threadArguments = arguments;
     int officePID = getpid();
-    int* toBankPipe = args -> arg2;
+    int* toBankPipe = threadArguments -> toBankPipe;
 
     printf("CHILD '%d': Async transaction post initiated.\n", officePID);
     int value = 0;
@@ -355,34 +358,34 @@ void *asyncPostTransaction(void *arguments) {
 }
 
 char* intToString(int pid) {
-    char *message = malloc(sizeof(char) * 20);
+    char* message = malloc(sizeof(char) * 20);
     sprintf(message, "%d", pid);
 
     return message;
 }
 
-void *asyncListenTransactions(void *arguments) {
-    struct arg_struct *args = arguments;
+void* asyncListenTransactions(void* arguments) {
+    struct arg_struct* threadArguments = arguments;
     int officePID = getpid();
-    int *accountsArray = args -> accounts;
-    int *errorsArray = args -> errors;
-    int *transactionsArray = args -> transactions;
-    // int* toBankPipe = args -> arg2;
-    int* toChildPipe = args -> arg3;
+    int* accountsArray = threadArguments -> accounts;
+    int* errorsArray = threadArguments -> errors;
+    int* transactionsArray = threadArguments -> transactions;
+    // int* toBankPipe = threadArguments -> toBankPipe;
+    int* toChildPipe = threadArguments -> toChildPipe;
 
     printf("CHILD %d: Async transaction listening initiated\n", officePID);
     while(true){
         char message[80];
         read(toChildPipe[READ], message, sizeof(message));
 
-        char *strOfficePID = intToString(officePID);
+        char* strOfficePID = intToString(officePID);
 
         int notMyMessage = strncmp(strOfficePID, message, strlen(strOfficePID));
 
         if (notMyMessage && strlen(message) < 10) {
             useMessage(&officePID, message, accountsArray, errorsArray, transactionsArray);
             /*
-            char *response = useMessage(&officePID, message, accountsArray);
+            char* response = useMessage(&officePID, message, accountsArray);
 
             if(*response) {
                 printf("CHILD %d: Writing post response to '%p'\n", officePID, (void*)&toBankPipe);
@@ -393,18 +396,18 @@ void *asyncListenTransactions(void *arguments) {
     }
 }
 
-char *useMessage(int *officePID, char *message, int *accountsArray, int *errorsArray, int *transactionsArray) {
-    char *response = NULL;
-    const char *DEPOSIT_OP = "00";
-    const char *WIDTHRAW_OP = "01";
-    const char *DUMP_OP = "10";
-    const char *DUMP_ACCS_OP = "11";
-    const char *DUMP_ERRS_OP = "12";
+char* useMessage(int* officePID, char* message, int* accountsArray, int* errorsArray, int* transactionsArray) {
+    char* response = NULL;
+    const char* DEPOSIT_OP = "00";
+    const char* WIDTHRAW_OP = "01";
+    const char* DUMP_OP = "10";
+    const char* DUMP_ACCS_OP = "11";
+    const char* DUMP_ERRS_OP = "12";
 
     printf("CHILD %d: Received broadcast message '%s'\n", *officePID, message);
 
     // TODO: Cut the message to fill the following variables
-    char *transactionOperation = message;
+    char*transactionOperation = message;
     int accountNumber = 0;
     int operationAmount = 1000;
 
@@ -466,7 +469,7 @@ char *useMessage(int *officePID, char *message, int *accountsArray, int *errorsA
     return response;
 }
 
-void storeTransacction(int *transactionsArray, int transactionValue) {
+void storeTransacction(int* transactionsArray, int transactionValue) {
     for (int transaction = 0; transaction < sizeof(transactionsArray); transaction++) {
         if (transactionsArray[transaction] == EMPTY_TRANSACTION) {
             transactionsArray[transaction] = transactionValue;
