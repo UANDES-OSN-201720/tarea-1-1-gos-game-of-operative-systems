@@ -155,19 +155,31 @@ int main(int argc, char** argv) {
 
             }
         } else if (command[0] == DUMP) {
-            //int childPID = command[1];
-            // TODO: Generate transactions CSV
-            // Broadcast to every toBankPipe
+            int childPID = command[1];
+            // TODO: Filter in case childPID is empty or doesn't exist
+            if (currentChild > 0) {
+                broadcastDumpCommand(&childPID, toBankPipes[0]);
+            } else {
+                printf("CENTRAL: Aún no hay sucursales creadas.\n");
+            }
 
         }  else if (command[0] == DUMP_ACCS) {
-            //int childPID = command[1];
-            // TODO: Generate accounts statuses CSV
-            // Broadcast to every toBankPipe
+            int childPID = command[1];
+            // TODO: Filter in case childPID is empty or doesn't exist
+            if (currentChild > 0) {
+                broadcastDumpAccsCommand(&childPID, toBankPipes[0]);
+            } else {
+                printf("CENTRAL: Aún no hay sucursales creadas.\n");
+            }
 
         }  else if (command[0] == DUMP_ERRS) {
-            //int childPID = command[1];
-            // TODO: Generate transactions errors CSV
-            // Broadcast to every toBankPipe
+            int childPID = command[1];
+            // TODO: Filter in case childPID is empty or doesn't exist
+            if (currentChild > 0) {
+                broadcastDumpErrsCommand(&childPID, toBankPipes[0]);
+            } else {
+                printf("CENTRAL: Aún no hay sucursales creadas.\n");
+            }
 
         } else {
             fprintf(stderr, "Comando no reconocido.\n");
@@ -310,16 +322,31 @@ void* asyncTransactionBroadcast(void* arguments){
 
     printf("CENTRAL: Async transaction broadcast initiated.\n");
     while(true){
-        // TODO: Consider making it async
         for (int toBankPipe = 0; toBankPipe < *childsAmount; toBankPipe++) {
-            char readbuffer[80];
-            read(toBankPipes[toBankPipe][READ], readbuffer, sizeof(readbuffer));
-            printf("\nCENTRAL: Broadcasting message '%s'\n", readbuffer);
 
-            for (int pipe = 0; pipe < *childsAmount; pipe++){
-                write(toChildPipes[pipe][WRITE], readbuffer, sizeof(readbuffer));
-            }
+            struct arg_struct broadcastArguments;
+            broadcastArguments.childsAmount = childsAmount;
+            broadcastArguments.toChildPipes = toChildPipes;
+            broadcastArguments.toBankPipe = toBankPipes[toBankPipe];
+
+            broadcastFromPipe(&broadcastArguments);
         }
+    }
+}
+
+void broadcastFromPipe(void* arguments) {
+    struct arg_struct* threadArguments = arguments;
+
+    int* childsAmount = threadArguments -> childsAmount;
+    int* fromPipe = threadArguments -> toBankPipe;
+    int** toChildPipes = threadArguments -> toChildPipes;
+
+    char readbuffer[80];
+    read(fromPipe[READ], readbuffer, sizeof(readbuffer));
+    printf("\nCENTRAL: Broadcasting message '%s'\n", readbuffer);
+
+    for (int pipe = 0; pipe < *childsAmount; pipe++){
+        write(toChildPipes[pipe][WRITE], readbuffer, sizeof(readbuffer));
     }
 }
 
@@ -476,4 +503,25 @@ void storeTransacction(int* transactionsArray, int transactionValue) {
             break;
         }
     }
+}
+
+void broadcastDumpCommand(int* childPID, int* toBankPipe) {
+    char* msg = intToString(*childPID);
+    // msg should contain the code for DUMP -> 10
+
+    write(toBankPipe[WRITE], msg, (strlen(msg) + 1));
+}
+
+void broadcastDumpAccsCommand(int* childPID, int* toBankPipe) {
+    char* msg = intToString(*childPID);
+    // msg should contain the code for DUMP -> 11
+
+    write(toBankPipe[WRITE], msg, (strlen(msg) + 1));
+}
+
+void broadcastDumpErrsCommand(int* childPID, int* toBankPipe) {
+    char* msg = intToString(*childPID);
+    // msg should contain the code for DUMP -> 12
+
+    write(toBankPipe[WRITE], msg, (strlen(msg) + 1));
 }

@@ -13,5 +13,9 @@ void* asyncListenTransactions(void* arguments);
 char* intToString(int pid);
 char* useMessage(int* officePID, char* message, int* accountsArray, int* errorsArray, int* transactionsArray);
 void storeTransacction(int* transactionsArray, int transactionValue);
+void broadcastFromPipe(void* arguments);
+void broadcastDumpCommand(int* childPID, int* toBankPipe);
+void broadcastDumpAccsCommand(int* childPID, int* toBankPipe);
+void broadcastDumpErrsCommand(int* childPID, int* toBankPipe);
 
 #endif
