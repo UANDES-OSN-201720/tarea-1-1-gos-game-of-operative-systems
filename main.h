@@ -11,6 +11,7 @@ void *asyncTransactionBroadcast(void *argunemts);
 void *asyncPostTransaction(void *arguments);
 void *asyncListenTransactions(void *arguments);
 char* intToString(int pid);
-char *useMessage(int *officePID, char *message, int *accountsArray);
+char *useMessage(int *officePID, char *message, int *accountsArray, int *errorsArray, int *transactionsArray);
+void storeTransacction(int *transactionsArray, int transactionValue);
 
 #endif
