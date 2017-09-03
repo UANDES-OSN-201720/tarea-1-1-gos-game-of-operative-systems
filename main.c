@@ -6,8 +6,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <pthread.h>
+#include <time.h>
 #include "main.h"
-
 
 const int QUIT = 0;
 const int INIT = 1;
@@ -331,4 +331,13 @@ void *asyncListenTransactions(void *arguments) {
             printf("CHILD %d: Should post response to '%p'\n", officePID, (void*)&toBankPipe);
         }
     }
+}
+
+long long int generateTransaction(int pidBank, int pidOffice){
+  sleep(1);
+  srand(time(NULL));
+  long long int account = rand() % 90 + 10;
+  long long int amount = rand() % 90000 + 10000;
+  long long int transaction = rand() % 2;
+  long long int final = (((pidBank*1000 + pidOffice)*100 + account)*1000000 + amount)*10 + transaction;
 }
