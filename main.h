@@ -10,6 +10,7 @@ void killChild(int pid);
 void *asyncTransactionBroadcast(void *argunemts);
 void *asyncPostTransaction(void *arguments);
 void *asyncListenTransactions(void *arguments);
-char* generateMessage(int pid);
+char* intToString(int pid);
+char *useMessage(int *officePID, char *message, int *accountsArray);
 
 #endif
