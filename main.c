@@ -494,7 +494,9 @@ char* useMessage(int* officePID, long long int message, int* accountsArray, int*
             return NULL;
         } else {
             response = "ERROR: Account doesn't have enough money!";
-            printf("\tCHILD %d: Error message '%s'\n", *officePID, response);
+            if(DEVELOPMENT) {
+                printf("\tCHILD %d: Error message '%s'\n", *officePID, response);
+            }
             return response;
         }
 
@@ -503,10 +505,20 @@ char* useMessage(int* officePID, long long int message, int* accountsArray, int*
         if(DEVELOPMENT) {
             printf("\tCHILD %d: EXECUTING DUMP COMMAND\n", *officePID);
         }
-        for (int transaction = 0; transaction < TRANSACTIONS_AMOUNT; transaction++) {
-            if (transactionsArray[transaction] != EMPTY_TRANSACTION) {
-                printf("\tCHILD %d:  >> Transaccion por $%d\n", *officePID, transactionsArray[transaction]);
+        char* fileName = parseFileName("dump_%d.csv", *officePID);
+
+        FILE *dumpFile = fopen(fileName,"w");
+        if (dumpFile != NULL) {
+
+            for (int transaction = 0; transaction < TRANSACTIONS_AMOUNT; transaction++) {
+                if (transactionsArray[transaction] != EMPTY_TRANSACTION) {
+                    fprintf(dumpFile,"%d,%d\n", transaction, transactionsArray[transaction]);
+                }
             }
+            fclose(dumpFile);
+            printf("\tSucursal %d: Archivo '%s' generado exitosamente!\n", *officePID, fileName);
+        } else {
+            printf("\tSucursal %d: Se produjo un error al generar el archivo '%s'.\n", *officePID, fileName);
         }
 
     // Operation 11: DUMP 1 Command
@@ -514,8 +526,18 @@ char* useMessage(int* officePID, long long int message, int* accountsArray, int*
         if(DEVELOPMENT) {
             printf("\tCHILD %d: EXECUTING DUMP_ACCS COMMAND\n", *officePID);
         }
-        for (int account = 0; account < total_accounts; account++) {
-            printf("\tCHILD %d:  >> Cuenta %d - $%d\n", *officePID, account, accountsArray[account]);
+        char* fileName = parseFileName("dump_accs_%d.csv", *officePID);
+
+        FILE *dumpFile = fopen(fileName,"w");
+        if (dumpFile != NULL) {
+
+            for (int account = 0; account < total_accounts; account++) {
+                fprintf(dumpFile,"%d,%d\n", account, accountsArray[account]);
+            }
+            fclose(dumpFile);
+            printf("\tSucursal %d: Archivo '%s' generado exitosamente!\n", *officePID, fileName);
+        } else {
+            printf("\tSucursal %d: Se produjo un error al generar el archivo '%s'.\n", *officePID, fileName);
         }
 
     // Operation 12: DUMP 2 Command
@@ -523,10 +545,17 @@ char* useMessage(int* officePID, long long int message, int* accountsArray, int*
         if(DEVELOPMENT) {
             printf("\tCHILD %d: EXECUTING DUMP_ERRS COMMAND\n", *officePID);
         }
+        char* fileName = parseFileName("dump_errs_%d.csv", *officePID);
     }
 
     response = "Responding message to sender apparently...";
     return response;
+}
+
+char* parseFileName(char* rawFileName, int officePID) {
+    char* finalMessage = malloc(sizeof(char) * 20);
+    sprintf(finalMessage, rawFileName, officePID);
+    return finalMessage;
 }
 
 void storeTransacction(int* transactionsArray, int transactionValue) {

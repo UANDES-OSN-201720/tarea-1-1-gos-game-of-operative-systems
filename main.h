@@ -21,5 +21,6 @@ char* generateTransaction(int pidBank, int pidOffice);
 char* messageToString(long long int message);
 int getChildPID(long long int message);
 void generateDumpRequest(int pidBank, int pidOffice, int dumpCode, int* toBankPipe);
+char* parseFileName(char* rawFileName, int officePID);
 
 #endif
