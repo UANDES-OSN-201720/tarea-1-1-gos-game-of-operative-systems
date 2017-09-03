@@ -237,10 +237,6 @@ int* splitCommand(char** commandBuf){
 
         output[0] = LIST;
 
-    } else if (!strncmp("dump", *commandBuf, strlen("dump"))){
-
-        output[0] = DUMP;
-
     } else if (!strncmp("dump_accs", *commandBuf, strlen("dump_accs"))){
 
         output[0] = DUMP_ACCS;
@@ -248,8 +244,12 @@ int* splitCommand(char** commandBuf){
     } else if (!strncmp("dump_errs", *commandBuf, strlen("dump_errs"))){
 
         output[0] = DUMP_ERRS;
-    }
+    } else if (!strncmp("dump", *commandBuf, strlen("dump"))){
 
+        output[0] = DUMP;
+
+    }
+    printf("OUTPUT COMMAND: %d", output[0]);
     return output;
 }
 
