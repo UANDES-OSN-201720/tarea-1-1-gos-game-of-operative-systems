@@ -457,9 +457,9 @@ char* useMessage(int* officePID, long long int message, int* accountsArray, int*
     }
 
     // TODO: Cut the message to fill the following variables
-    int transactionOperation = message % 10;
-    int accountNumber = (message % 1000000000) / 10000000;
-    int operationAmount = (message % 1000000) / 10;
+    int transactionOperation = getTransaction(message);
+    int accountNumber = getAccount(message);
+    int operationAmount = getAmount(message);
 
     // TODO: Buggy sizeof doesn't give the array length
     int total_accounts = accountNumber;
