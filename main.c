@@ -40,6 +40,7 @@ struct arg_struct {
     int* accounts;
     int* errors;
     int* transactions;
+    int* officesPID;
 };
 
 int main(int argc, char** argv) {
@@ -134,6 +135,7 @@ int main(int argc, char** argv) {
                 threadArguments.accounts = accountsArray;
                 threadArguments.errors = errorsArray;
                 threadArguments.transactions = transactionsArray;
+                threadArguments.officesPID = pidArray;
 
                 // Create transactionRequest thread
                 pthread_t transactionRequestThread;
@@ -360,9 +362,11 @@ void* asyncPostTransaction(void* arguments) {
     struct arg_struct* threadArguments = arguments;
     int officePID = getpid();
     int* toBankPipe = threadArguments -> toBankPipe;
+    int* officesPID = threadArguments -> officesPID;
 
     printf("CHILD '%d': Async transaction post initiated.\n", officePID % 1000);
     while(true){
+        // TODO: use officesPID to extract a random officePID to make a transaction
         char* message = generateTransaction(officePID % 1000, officePID % 1000);
         write(toBankPipe[WRITE], message, (strlen(message) + 1));
         sleep(10);
