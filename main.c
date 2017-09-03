@@ -420,7 +420,23 @@ void* asyncListenTransactions(void* arguments) {
 }
 
 int getChildPID(long long int message) {
-    return message / 1000000000 - (message / 1000000000 / 1000 * 1000);
+    return message % 1000000000000 / 1000000000;
+}
+
+int getBankPID(long long int message){
+  return message / 1000000000000;
+}
+
+int getAccount(long long int message){
+  return message % 1000000000 / 10000000;
+}
+
+int getAmount(long long int message){
+    return message % 10000000 / 10;
+}
+
+int getTransaction(long long int message){
+    return message % 10;
 }
 
 char* messageToString(long long int message) {
