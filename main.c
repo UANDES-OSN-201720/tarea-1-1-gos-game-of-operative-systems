@@ -17,6 +17,12 @@ const int DUMP = 4;
 const int DUMP_ACCS = 5;
 const int DUMP_ERRS = 6;
 
+const int DEPOSIT_OP = 0;
+const int WIDTHRAW_OP = 1;
+const int DUMP_OP = 2;
+const int DUMP_ACCS_OP = 3;
+const int DUMP_ERRS_OP = 4;
+
 const int READ = 0;
 const int WRITE = 1;
 
@@ -158,7 +164,7 @@ int main(int argc, char** argv) {
             int childPID = command[1];
             // TODO: Filter in case childPID is empty or doesn't exist
             if (currentChild > 0) {
-                broadcastDumpCommand(&childPID, toBankPipes[0]);
+                broadcastDumpCommand(bankId, &childPID, toBankPipes[0]);
             } else {
                 printf("CENTRAL: Aún no hay sucursales creadas.\n");
             }
@@ -167,7 +173,7 @@ int main(int argc, char** argv) {
             int childPID = command[1];
             // TODO: Filter in case childPID is empty or doesn't exist
             if (currentChild > 0) {
-                broadcastDumpAccsCommand(&childPID, toBankPipes[0]);
+                broadcastDumpAccsCommand(bankId, &childPID, toBankPipes[0]);
             } else {
                 printf("CENTRAL: Aún no hay sucursales creadas.\n");
             }
@@ -176,7 +182,7 @@ int main(int argc, char** argv) {
             int childPID = command[1];
             // TODO: Filter in case childPID is empty or doesn't exist
             if (currentChild > 0) {
-                broadcastDumpErrsCommand(&childPID, toBankPipes[0]);
+                broadcastDumpErrsCommand(bankId, &childPID, toBankPipes[0]);
             } else {
                 printf("CENTRAL: Aún no hay sucursales creadas.\n");
             }
@@ -355,33 +361,23 @@ void* asyncPostTransaction(void* arguments) {
     int officePID = getpid();
     int* toBankPipe = threadArguments -> toBankPipe;
 
-    printf("CHILD '%d': Async transaction post initiated.\n", officePID);
-    int value = 0;
+    printf("CHILD '%d': Async transaction post initiated.\n", officePID % 1000);
     while(true){
-        char* msg = intToString(officePID);
-
-        switch (value) {
-            case 0:
-                msg = "00";
-                break;
-            case 1:
-                msg = "01";
-                break;
-            case 2:
-                msg = "10";
-                break;
-            case 3:
-                msg = "11";
-                break;
-            default: msg = "12";
-        }
-        value += 1;
-        if (value > 4) {
-            value = 0;
-        }
-        write(toBankPipe[WRITE], msg, (strlen(msg) + 1));
+        char* message = generateTransaction(officePID % 1000, officePID % 1000);
+        write(toBankPipe[WRITE], message, (strlen(message) + 1));
         sleep(10);
     }
+}
+
+char* generateTransaction(int pidBank, int pidOffice){
+  sleep(1);
+  srand(time(NULL));
+  long long int account = rand() % 90 + 10;
+  long long int amount = rand() % 90000 + 10000;
+  long long int transaction = rand() % 2;
+  // printf("%d-%d-%lli-%lli-%lli\n", pidBank, pidOffice, account, amount, transaction);
+  long long int final = (((pidBank*1000 + pidOffice)*100 + account)*1000000 + amount)*10 + transaction;
+  return messageToString(final);
 }
 
 char* intToString(int pid) {
@@ -400,17 +396,17 @@ void* asyncListenTransactions(void* arguments) {
     // int* toBankPipe = threadArguments -> toBankPipe;
     int* toChildPipe = threadArguments -> toChildPipe;
 
-    printf("CHILD %d: Async transaction listening initiated\n", officePID);
+    printf("CHILD %d: Async transaction listening initiated\n", officePID % 1000);
     while(true){
         char message[80];
         read(toChildPipe[READ], message, sizeof(message));
 
-        char* strOfficePID = intToString(officePID);
+        long long int numericMessage = atoll(message);
+        int childPIDM = getChildPID(numericMessage);
+        int notMyMessage = childPIDM - officePID % 1000;
 
-        int notMyMessage = strncmp(strOfficePID, message, strlen(strOfficePID));
-
-        if (notMyMessage && strlen(message) < 10) {
-            useMessage(&officePID, message, accountsArray, errorsArray, transactionsArray);
+        if (!notMyMessage) {
+            useMessage(&childPIDM, numericMessage, accountsArray, errorsArray, transactionsArray);
             /*
             char* response = useMessage(&officePID, message, accountsArray);
 
@@ -423,26 +419,22 @@ void* asyncListenTransactions(void* arguments) {
     }
 }
 
-long long int generateTransaction(int pidBank, int pidOffice){
-  sleep(1);
-  srand(time(NULL));
-  long long int account = rand() % 90 + 10;
-  long long int amount = rand() % 90000 + 10000;
-  long long int transaction = rand() % 2;
-  long long int final = (((pidBank*1000 + pidOffice)*100 + account)*1000000 + amount)*10 + transaction;
+int getChildPID(long long int message) {
+    return message / 1000000000 - (message / 1000000000 / 1000 * 1000);
 }
-char* useMessage(int* officePID, char* message, int* accountsArray, int* errorsArray, int* transactionsArray) {
-    char* response = NULL;
-    const char* DEPOSIT_OP = "00";
-    const char* WIDTHRAW_OP = "01";
-    const char* DUMP_OP = "10";
-    const char* DUMP_ACCS_OP = "11";
-    const char* DUMP_ERRS_OP = "12";
 
-    printf("CHILD %d: Received broadcast message '%s'\n", *officePID, message);
+char* messageToString(long long int message) {
+    char* finalMessage = malloc(sizeof(char) * 20);
+    sprintf(finalMessage, "%lli", message);
+    return finalMessage;
+}
+
+char* useMessage(int* officePID, long long int message, int* accountsArray, int* errorsArray, int* transactionsArray) {
+    char* response = NULL;
+    printf("CHILD %d: Received broadcast message '%lli'\n", *officePID, message);
 
     // TODO: Cut the message to fill the following variables
-    char*transactionOperation = message;
+    int transactionOperation = message % 10;
     int accountNumber = 0;
     int operationAmount = 1000;
 
@@ -457,14 +449,14 @@ char* useMessage(int* officePID, char* message, int* accountsArray, int* errorsA
     }
 
     // Operation 00: Deposit money to accountNumber
-    if (!strncmp(DEPOSIT_OP, transactionOperation, strlen(DEPOSIT_OP))) {
+    if (transactionOperation == DEPOSIT_OP) {
         printf("\tCHILD %d: EXECUTING DEPOSIT COMMAND\n", *officePID);
         accountsArray[accountNumber] += operationAmount;
 
         storeTransacction(transactionsArray, operationAmount);
 
     // Operation 01: Widthraw money from accountNumber
-    } else if (!strncmp(WIDTHRAW_OP, transactionOperation, strlen(WIDTHRAW_OP))) {
+    } else if (transactionOperation == WIDTHRAW_OP) {
         printf("\tCHILD %d: EXECUTING WIDTHRAW COMMAND\n", *officePID);
 
         if (accountsArray[accountNumber] >= operationAmount){
@@ -480,7 +472,7 @@ char* useMessage(int* officePID, char* message, int* accountsArray, int* errorsA
         }
 
     // Operation 10: DUMP Command
-    } else if (!strncmp(DUMP_OP, transactionOperation, strlen(DUMP_OP))) {
+    } else if (transactionOperation == DUMP_OP) {
         printf("\tCHILD %d: EXECUTING DUMP COMMAND\n", *officePID);
         for (int transaction = 0; transaction < TRANSACTIONS_AMOUNT; transaction++) {
             if (transactionsArray[transaction] != EMPTY_TRANSACTION) {
@@ -489,14 +481,14 @@ char* useMessage(int* officePID, char* message, int* accountsArray, int* errorsA
         }
 
     // Operation 11: DUMP 1 Command
-    } else if (!strncmp(DUMP_ACCS_OP, transactionOperation, strlen(DUMP_ACCS_OP))) {
+    } else if (transactionOperation == DUMP_ACCS_OP) {
         printf("\tCHILD %d: EXECUTING DUMP_ACCS COMMAND\n", *officePID);
         for (int account = 0; account < total_accounts; account++) {
             printf("\tCHILD %d:  >> Cuenta %d - $%d\n", *officePID, account, accountsArray[account]);
         }
 
     // Operation 12: DUMP 2 Command
-    } else if (!strncmp(DUMP_ERRS_OP, transactionOperation, strlen(DUMP_ERRS_OP))) {
+    } else if (transactionOperation == DUMP_ERRS_OP) {
         printf("\tCHILD %d: EXECUTING DUMP_ERRS COMMAND\n", *officePID);
     }
 
@@ -513,23 +505,25 @@ void storeTransacction(int* transactionsArray, int transactionValue) {
     }
 }
 
-void broadcastDumpCommand(int* childPID, int* toBankPipe) {
-    char* msg = intToString(*childPID);
-    // msg should contain the code for DUMP -> 10
-
-    write(toBankPipe[WRITE], msg, (strlen(msg) + 1));
+void broadcastDumpCommand(const int bankPID, int* childPID, int* toBankPipe) {
+    generateDumpRequest(bankPID % 1000, *childPID % 1000, DUMP_OP, toBankPipe);
 }
 
-void broadcastDumpAccsCommand(int* childPID, int* toBankPipe) {
-    char* msg = intToString(*childPID);
-    // msg should contain the code for DUMP -> 11
-
-    write(toBankPipe[WRITE], msg, (strlen(msg) + 1));
+void broadcastDumpAccsCommand(const int bankPID, int* childPID, int* toBankPipe) {
+    generateDumpRequest(bankPID % 1000, *childPID % 1000, DUMP_ACCS_OP, toBankPipe);
 }
 
-void broadcastDumpErrsCommand(int* childPID, int* toBankPipe) {
-    char* msg = intToString(*childPID);
-    // msg should contain the code for DUMP -> 12
+void broadcastDumpErrsCommand(const int bankPID, int* childPID, int* toBankPipe) {
+    generateDumpRequest(bankPID % 1000, *childPID % 1000, DUMP_ERRS_OP, toBankPipe);
+}
 
-    write(toBankPipe[WRITE], msg, (strlen(msg) + 1));
+void generateDumpRequest(int pidBank, int pidOffice, int dumpCode, int* toBankPipe){
+  sleep(1);
+  srand(time(NULL));
+  long long int account = rand() % 90 + 10;
+  long long int amount = 10000;
+  long long int transaction = dumpCode;
+  long long int final = (((pidBank * 1000 + pidOffice) * 100 + account) * 1000000 + amount) * 10 + transaction;
+  char* message = messageToString(final);
+  write(toBankPipe[WRITE], message, (strlen(message) + 1));
 }

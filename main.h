@@ -11,11 +11,15 @@ void* asyncTransactionBroadcast(void* argunemts);
 void* asyncPostTransaction(void* arguments);
 void* asyncListenTransactions(void* arguments);
 char* intToString(int pid);
-char* useMessage(int* officePID, char* message, int* accountsArray, int* errorsArray, int* transactionsArray);
+char* useMessage(int* officePID, long long int message, int* accountsArray, int* errorsArray, int* transactionsArray);
 void storeTransacction(int* transactionsArray, int transactionValue);
 void broadcastFromPipe(void* arguments);
-void broadcastDumpCommand(int* childPID, int* toBankPipe);
-void broadcastDumpAccsCommand(int* childPID, int* toBankPipe);
-void broadcastDumpErrsCommand(int* childPID, int* toBankPipe);
+void broadcastDumpCommand(const int bankPID, int* childPID, int* toBankPipe);
+void broadcastDumpAccsCommand(const int bankPID, int* childPID, int* toBankPipe);
+void broadcastDumpErrsCommand(const int bankPID, int* childPID, int* toBankPipe);
+char* generateTransaction(int pidBank, int pidOffice);
+char* messageToString(long long int message);
+int getChildPID(long long int message);
+void generateDumpRequest(int pidBank, int pidOffice, int dumpCode, int* toBankPipe);
 
 #endif
