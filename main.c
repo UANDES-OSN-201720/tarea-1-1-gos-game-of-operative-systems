@@ -113,7 +113,9 @@ int main(int argc, char** argv) {
                 int accountAmount = command[1];
                 int accountsArray[accountAmount];
                 for (int account = 0; account < accountAmount; account++) {
-                    accountsArray[account] = 0;
+                    srand(time(NULL)+account);
+                    accountsArray[account] = rand()%490000000 +1000;
+                    //printf("Generando montos para las cuentas! %d\n", accountsArray[account]);
                 }
 
                 int transactionsArray[TRANSACTIONS_AMOUNT];
@@ -130,7 +132,7 @@ int main(int argc, char** argv) {
                 struct arg_struct threadArguments;
                 threadArguments.toBankPipe = toBankPipes[currentChild - 1];
                 threadArguments.toChildPipe = toChildPipes[currentChild - 1];
-
+                threadArguments.childsAmount = &currentChild;
                 threadArguments.accounts = accountsArray;
                 threadArguments.errors = errorsArray;
                 threadArguments.transactions = transactionsArray;
@@ -358,14 +360,18 @@ void broadcastFromPipe(void* arguments) {
 void* asyncPostTransaction(void* arguments) {
     struct arg_struct* threadArguments = arguments;
     int officePID = getpid();
+    int* childsAmount = threadArguments -> childsAmount;
     int* toBankPipe = threadArguments -> toBankPipe;
     int* officesPID = threadArguments -> officesPID;
     if(DEVELOPMENT) {
         printf("CHILD '%d': Async transaction post initiated.\n", officePID % 1000);
     }
     while(true){
-        // TODO: use officesPID to extract a random officePID to make a transaction
-        char* message = generateTransaction(officePID % 1000, officePID % 1000);
+        srand(time(NULL));
+        int officePIDindex = rand() % (childsAmount[0]); // puede que haya que poner un -1
+        int officePIDtransaction = officesPID[officePIDindex];
+        //printf("office t %d childsAmount %d officePID %d\n", officePIDtransaction, childsAmount[0], officePID);
+        char* message = generateTransaction(officePID % 1000, officePIDtransaction % 1000);
         write(toBankPipe[WRITE], message, (strlen(message) + 1));
         sleep(10);
     }
