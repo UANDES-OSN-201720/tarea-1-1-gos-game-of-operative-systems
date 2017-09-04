@@ -27,11 +27,12 @@ const int READ = 0;
 const int WRITE = 1;
 
 const int EMPTY_TRANSACTION = -1;
+const char* EMPTY_ERROR = "-";
 
 const int TOTAL_OFFICES = 128;
 const int TRANSACTIONS_AMOUNT = 1000;
 
-const int DEVELOPMENT = 0;
+const int DEVELOPMENT = 1;
 
 struct arg_struct {
     int* childsAmount;
@@ -40,9 +41,9 @@ struct arg_struct {
     int** toChildPipes;
     int** toBankPipes;
     int* accounts;
-    int* errors;
     int* transactions;
     int* officesPID;
+    char** errors;
 };
 
 int main(int argc, char** argv) {
@@ -85,7 +86,7 @@ int main(int argc, char** argv) {
         } else if (command[0] == LIST) {
             printf("Lista de sucursales: \n");
             for (int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
-                printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex]);
+                printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex] % 1000);
                 // TODO: Missing accounts amount for every office.
             }
 
@@ -121,10 +122,11 @@ int main(int argc, char** argv) {
                     transactionsArray[transaction] = EMPTY_TRANSACTION;
                 }
 
-                int errorsArray[1000];
+                char** errorsArray = malloc(sizeof(char) * 80);
                 for (int error = 0; error < 1000; error++) {
-                    errorsArray[error] = -1;
+                    errorsArray[error] = "-";
                 }
+
                 accountsArray[0] = 1000;
 
                 struct arg_struct threadArguments;
@@ -132,9 +134,9 @@ int main(int argc, char** argv) {
                 threadArguments.toChildPipe = toChildPipes[currentChild - 1];
 
                 threadArguments.accounts = accountsArray;
-                threadArguments.errors = errorsArray;
                 threadArguments.transactions = transactionsArray;
                 threadArguments.officesPID = pidArray;
+                threadArguments.errors = errorsArray;
 
                 // Create transactionRequest thread
                 pthread_t transactionRequestThread;
@@ -393,9 +395,8 @@ void* asyncListenTransactions(void* arguments) {
     struct arg_struct* threadArguments = arguments;
     int officePID = getpid();
     int* accountsArray = threadArguments -> accounts;
-    int* errorsArray = threadArguments -> errors;
+    char** errorsArray = threadArguments -> errors;
     int* transactionsArray = threadArguments -> transactions;
-    // int* toBankPipe = threadArguments -> toBankPipe;
     int* toChildPipe = threadArguments -> toChildPipe;
 
     if(DEVELOPMENT) {
@@ -449,7 +450,7 @@ char* messageToString(long long int message) {
     return finalMessage;
 }
 
-char* useMessage(int* officePID, long long int message, int* accountsArray, int* errorsArray, int* transactionsArray) {
+char* useMessage(int* officePID, long long int message, int* accountsArray, char** errorsArray, int* transactionsArray) {
     char* response = NULL;
 
     if(DEVELOPMENT) {
@@ -467,7 +468,7 @@ char* useMessage(int* officePID, long long int message, int* accountsArray, int*
     // TODO: Keep in mind the exeption when accountNumber is not needed
     if (total_accounts < accountNumber){
         response = "ERROR: Account doesn't exist!";
-        printf("\tCHILD %d: Error message '%s'\n", *officePID, response);
+        logError(errorsArray, response);
         return response;
     }
 
@@ -497,6 +498,7 @@ char* useMessage(int* officePID, long long int message, int* accountsArray, int*
             if(DEVELOPMENT) {
                 printf("\tCHILD %d: Error message '%s'\n", *officePID, response);
             }
+            logError(errorsArray, response);
             return response;
         }
 
@@ -546,6 +548,20 @@ char* useMessage(int* officePID, long long int message, int* accountsArray, int*
             printf("\tCHILD %d: EXECUTING DUMP_ERRS COMMAND\n", *officePID);
         }
         char* fileName = parseFileName("dump_errs_%d.csv", *officePID);
+
+        FILE *dumpFile = fopen(fileName,"w");
+        if (dumpFile != NULL) {
+
+            for (int error = 0; error < 50; error++) {
+                if(errorsArray[error] != EMPTY_ERROR) {
+                    fprintf(dumpFile,"%s\n", errorsArray[error]);
+                }
+            }
+            fclose(dumpFile);
+            printf("\tSucursal %d: Archivo '%s' generado exitosamente!\n", *officePID, fileName);
+        } else {
+            printf("\tSucursal %d: Se produjo un error al generar el archivo '%s'.\n", *officePID, fileName);
+        }
     }
 
     response = "Responding message to sender apparently...";
@@ -562,6 +578,15 @@ void storeTransacction(int* transactionsArray, int transactionValue) {
     for (int transaction = 0; transaction < sizeof(transactionsArray); transaction++) {
         if (transactionsArray[transaction] == EMPTY_TRANSACTION) {
             transactionsArray[transaction] = transactionValue;
+            break;
+        }
+    }
+}
+
+void logError(char** errorsArray, char* errorMessage){
+    for (int error = 0; error < 1000; error++) {
+        if (errorsArray[error] == EMPTY_ERROR) {
+            errorsArray[error] = errorMessage;
             break;
         }
     }
