@@ -375,7 +375,7 @@ void* asyncPostTransaction(void* arguments) {
         //printf("office t %d childsAmount %d officePID %d\n", officePIDtransaction, childsAmount[0], officePID);
         char* message = generateTransaction(officePID % 1000, officePIDtransaction % 1000);
         write(toBankPipe[WRITE], message, (strlen(message) + 1));
-        sleep(10);
+        sleep(1);
     }
 }
 
@@ -518,6 +518,7 @@ char* useMessage(int* officePID, long long int message, int* accountsArray, char
         FILE *dumpFile = fopen(fileName,"w");
         if (dumpFile != NULL) {
 
+            fprintf(dumpFile,"transaction,amount\n");
             for (int transaction = 0; transaction < TRANSACTIONS_AMOUNT; transaction++) {
                 if (transactionsArray[transaction] != EMPTY_TRANSACTION) {
                     fprintf(dumpFile,"%d,%d\n", transaction, transactionsArray[transaction]);
@@ -539,6 +540,7 @@ char* useMessage(int* officePID, long long int message, int* accountsArray, char
         FILE *dumpFile = fopen(fileName,"w");
         if (dumpFile != NULL) {
 
+            fprintf(dumpFile,"account,amount\n");
             for (int account = 0; account < total_accounts; account++) {
                 fprintf(dumpFile,"%d,%d\n", account, accountsArray[account]);
             }
@@ -558,6 +560,7 @@ char* useMessage(int* officePID, long long int message, int* accountsArray, char
         FILE *dumpFile = fopen(fileName,"w");
         if (dumpFile != NULL) {
 
+            fprintf(dumpFile,"error\n");
             for (int error = 0; error < 50; error++) {
                 if(errorsArray[error] != EMPTY_ERROR) {
                     fprintf(dumpFile,"%s\n", errorsArray[error]);
