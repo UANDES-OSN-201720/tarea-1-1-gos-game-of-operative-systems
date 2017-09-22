@@ -32,7 +32,7 @@ const char* EMPTY_ERROR = "-";
 const int TOTAL_OFFICES = 128;
 const int TRANSACTIONS_AMOUNT = 1000;
 
-const int DEVELOPMENT = 1;
+const int DEVELOPMENT = true;
 
 struct arg_struct {
     int* childsAmount;
@@ -44,6 +44,17 @@ struct arg_struct {
     int* transactions;
     int* officesPID;
     char** errors;
+};
+
+struct messageData {
+    int destinationPid;
+    int destintationAccount;
+
+    int sourcePid;
+    int sourceAccount;
+
+    int operationCommand;
+    int transactionAmount;
 };
 
 int main(int argc, char** argv) {
@@ -388,7 +399,7 @@ void* asyncPostTransaction(void* arguments) {
         //printf("office t %d childsAmount %d officePID %d\n", officePIDtransaction, childsAmount[0], officePID);
         char* message = generateTransaction(officePID % 1000, officePIDtransaction % 1000);
         write(toBankPipe[WRITE], message, (strlen(message) + 1));
-        sleep(10);
+        sleep(1);
     }
 }
 
@@ -398,7 +409,7 @@ char* generateTransaction(int pidBank, int pidOffice){
   long long int account = rand() % 90 + 10;
   long long int amount = rand() % 90000 + 10000;
   long long int transaction = rand() % 2;
-  // printf("%d-%d-%lli-%lli-%lli\n", pidBank, pidOffice, account, amount, transaction);
+
   long long int final = (((pidBank*1000 + pidOffice)*100 + account)*1000000 + amount)*10 + transaction;
   return messageToString(final);
 }
@@ -412,27 +423,28 @@ char* intToString(int pid) {
 
 void* asyncListenTransactions(void* arguments) {
     struct arg_struct* threadArguments = arguments;
-    int officePID = getpid();
+    int currentPid = getpid();
     int* accountsArray = threadArguments -> accounts;
     char** errorsArray = threadArguments -> errors;
     int* transactionsArray = threadArguments -> transactions;
     int* toChildPipe = threadArguments -> toChildPipe;
 
     if(DEVELOPMENT) {
-        printf("CHILD %d: Async transaction listening initiated\n", officePID % 1000);
+        printf("CHILD %d: Async transaction listening initiated\n", currentPid % 1000);
     }
     while(true){
-        char message[80];
-        read(toChildPipe[READ], message, sizeof(message));
+        char rawMessage[80];
+        read(toChildPipe[READ], rawMessage, sizeof(rawMessage));
 
-        long long int numericMessage = atoll(message);
-        int childPIDM = getChildPID(numericMessage);
-        int notMyMessage = childPIDM - officePID % 1000;
+        long long int numericMessage = atoll(rawMessage);
+        printf(">>> '%lli'\n", numericMessage);
 
-        if (!notMyMessage) {
-            useMessage(&childPIDM, numericMessage, accountsArray, errorsArray, transactionsArray);
+        struct messageData parsedMessage;
+        parseNumericMessage(&parsedMessage, numericMessage);
+
+        if (shouldExecuteMessage(parsedMessage.destinationPid, currentPid)) {
+            executeMessageOperation(&parsedMessage, accountsArray, errorsArray, transactionsArray);
             /*
-            char* response = useMessage(&officePID, message, accountsArray);
 
             if(*response) {
                 printf("CHILD %d: Writing post response to '%p'\n", officePID, (void*)&toBankPipe);
@@ -443,7 +455,31 @@ void* asyncListenTransactions(void* arguments) {
     }
 }
 
-int getChildPID(long long int message) {
+int shouldExecuteMessage(int destinationPid, int currentPid) {
+    return !(destinationPid - currentPid % 1000);
+}
+
+int parseNumericMessage(struct messageData *parsedMessage, long long int numericMessage) {
+    parsedMessage -> destinationPid = getDestinationPid(numericMessage);
+    parsedMessage -> destintationAccount = getDestinationAccount(numericMessage);
+    parsedMessage -> sourcePid = getSourcePid(numericMessage);
+    parsedMessage -> sourceAccount = getSourceAccount(numericMessage);
+    parsedMessage -> operationCommand = getOperationCommand(numericMessage);
+    parsedMessage -> transactionAmount = getTransactionAmount(numericMessage);
+    return 0;
+}
+
+int getSourcePid(long long int message) {
+    // TODO: Fix for new format
+    return message % 1000000000000 / 1000000000;
+}
+
+int getSourceAccount(long long int message) {
+    // TODO: Fix for new format
+    return message % 1000000000 / 10000000;
+}
+
+int getDestinationPid(long long int message) {
     return message % 1000000000000 / 1000000000;
 }
 
@@ -451,15 +487,15 @@ int getBankPID(long long int message){
   return message / 1000000000000;
 }
 
-int getAccount(long long int message){
+int getDestinationAccount(long long int message){
   return message % 1000000000 / 10000000;
 }
 
-int getAmount(long long int message){
+int getTransactionAmount(long long int message){
     return message % 10000000 / 10;
 }
 
-int getTransaction(long long int message){
+int getOperationCommand(long long int message){
     return message % 10;
 }
 
@@ -469,117 +505,123 @@ char* messageToString(long long int message) {
     return finalMessage;
 }
 
-char* useMessage(int* officePID, long long int message, int* accountsArray, char** errorsArray, int* transactionsArray) {
+char* executeMessageOperation(struct messageData* parsedMessage, int* accountsArray, char** errorsArray, int* transactionsArray) {
     char* response = NULL;
 
+    int destinationPid = parsedMessage -> destinationPid;
+    int destintationAccount = parsedMessage -> destintationAccount;
+    // TODO: Use commented variables
+    // int sourcePid = parsedMessage -> sourcePid;
+    // int sourceAccount = parsedMessage -> sourceAccount;
+    int operationCommand = parsedMessage -> operationCommand;
+    int transactionAmount = parsedMessage -> transactionAmount;
+
     if(DEVELOPMENT) {
-        printf("CHILD %d: Received broadcast message '%lli'\n", *officePID, message);
+        printf("CHILD %d: Received broadcast message\n", destinationPid);
     }
 
-    // TODO: Cut the message to fill the following variables
-    int transactionOperation = getTransaction(message);
-    int accountNumber = getAccount(message);
-    int operationAmount = getAmount(message);
-
     // TODO: Buggy sizeof doesn't give the array length
-    int total_accounts = accountNumber;
+    int total_accounts = destintationAccount;
 
-    // TODO: Keep in mind the exeption when accountNumber is not needed
-    if (total_accounts < accountNumber){
+    // TODO: Keep in mind the exeption when destintationAccount is not needed
+    if (total_accounts < destintationAccount){
         response = "ERROR: Account doesn't exist!";
         logError(errorsArray, response);
         return response;
     }
 
-    // Operation 00: Deposit money to accountNumber
-    if (transactionOperation == DEPOSIT_OP) {
+    // Operation 00: Deposit money to destintationAccount
+    if (operationCommand == DEPOSIT_OP) {
         if(DEVELOPMENT) {
-            printf("\tCHILD %d: EXECUTING DEPOSIT COMMAND\n", *officePID);
+            printf("\tCHILD %d: EXECUTING DEPOSIT COMMAND\n", destinationPid);
         }
-        accountsArray[accountNumber] += operationAmount;
+        accountsArray[destintationAccount] += transactionAmount;
 
-        storeTransacction(transactionsArray, operationAmount);
+        storeTransacction(transactionsArray, transactionAmount);
 
-    // Operation 01: Widthraw money from accountNumber
-    } else if (transactionOperation == WIDTHRAW_OP) {
+    // Operation 01: Widthraw money from destintationAccount
+    } else if (operationCommand == WIDTHRAW_OP) {
         if(DEVELOPMENT) {
-            printf("\tCHILD %d: EXECUTING WIDTHRAW COMMAND\n", *officePID);
+            printf("\tCHILD %d: EXECUTING WIDTHRAW COMMAND\n", destinationPid);
         }
 
-        if (accountsArray[accountNumber] >= operationAmount){
-            accountsArray[accountNumber] -= operationAmount;
+        if (accountsArray[destintationAccount] >= transactionAmount){
+            accountsArray[destintationAccount] -= transactionAmount;
 
-            storeTransacction(transactionsArray, -1 * operationAmount);
+            storeTransacction(transactionsArray, -1 * transactionAmount);
 
             return NULL;
         } else {
             response = "ERROR: Account doesn't have enough money!";
             if(DEVELOPMENT) {
-                printf("\tCHILD %d: Error message '%s'\n", *officePID, response);
+                printf("\tCHILD %d: Error message '%s'\n", destinationPid, response);
             }
             logError(errorsArray, response);
             return response;
         }
 
     // Operation 10: DUMP Command
-    } else if (transactionOperation == DUMP_OP) {
+    } else if (operationCommand == DUMP_OP) {
         if(DEVELOPMENT) {
-            printf("\tCHILD %d: EXECUTING DUMP COMMAND\n", *officePID);
+            printf("\tCHILD %d: EXECUTING DUMP COMMAND\n", destinationPid);
         }
-        char* fileName = parseFileName("dump_%d.csv", *officePID);
+        char* fileName = parseFileName("dump_%d.csv", destinationPid);
 
         FILE *dumpFile = fopen(fileName,"w");
         if (dumpFile != NULL) {
 
+            fprintf(dumpFile,"transaction,amount\n");
             for (int transaction = 0; transaction < TRANSACTIONS_AMOUNT; transaction++) {
                 if (transactionsArray[transaction] != EMPTY_TRANSACTION) {
                     fprintf(dumpFile,"%d,%d\n", transaction, transactionsArray[transaction]);
                 }
             }
             fclose(dumpFile);
-            printf("\tSucursal %d: Archivo '%s' generado exitosamente!\n", *officePID, fileName);
+            printf("\tSucursal %d: Archivo '%s' generado exitosamente!\n", destinationPid, fileName);
         } else {
-            printf("\tSucursal %d: Se produjo un error al generar el archivo '%s'.\n", *officePID, fileName);
+            printf("\tSucursal %d: Se produjo un error al generar el archivo '%s'.\n", destinationPid, fileName);
         }
 
     // Operation 11: DUMP 1 Command
-    } else if (transactionOperation == DUMP_ACCS_OP) {
+    } else if (operationCommand == DUMP_ACCS_OP) {
         if(DEVELOPMENT) {
-            printf("\tCHILD %d: EXECUTING DUMP_ACCS COMMAND\n", *officePID);
+            printf("\tCHILD %d: EXECUTING DUMP_ACCS COMMAND\n", destinationPid);
         }
-        char* fileName = parseFileName("dump_accs_%d.csv", *officePID);
+        char* fileName = parseFileName("dump_accs_%d.csv", destinationPid);
 
         FILE *dumpFile = fopen(fileName,"w");
         if (dumpFile != NULL) {
 
+            fprintf(dumpFile,"account,amount\n");
             for (int account = 0; account < total_accounts; account++) {
                 fprintf(dumpFile,"%d,%d\n", account, accountsArray[account]);
             }
             fclose(dumpFile);
-            printf("\tSucursal %d: Archivo '%s' generado exitosamente!\n", *officePID, fileName);
+            printf("\tSucursal %d: Archivo '%s' generado exitosamente!\n", destinationPid, fileName);
         } else {
-            printf("\tSucursal %d: Se produjo un error al generar el archivo '%s'.\n", *officePID, fileName);
+            printf("\tSucursal %d: Se produjo un error al generar el archivo '%s'.\n", destinationPid, fileName);
         }
 
     // Operation 12: DUMP 2 Command
-    } else if (transactionOperation == DUMP_ERRS_OP) {
+    } else if (operationCommand == DUMP_ERRS_OP) {
         if(DEVELOPMENT) {
-            printf("\tCHILD %d: EXECUTING DUMP_ERRS COMMAND\n", *officePID);
+            printf("\tCHILD %d: EXECUTING DUMP_ERRS COMMAND\n", destinationPid);
         }
-        char* fileName = parseFileName("dump_errs_%d.csv", *officePID);
+        char* fileName = parseFileName("dump_errs_%d.csv", destinationPid);
 
         FILE *dumpFile = fopen(fileName,"w");
         if (dumpFile != NULL) {
 
+            fprintf(dumpFile,"error\n");
             for (int error = 0; error < 50; error++) {
                 if(errorsArray[error] != EMPTY_ERROR) {
                     fprintf(dumpFile,"%s\n", errorsArray[error]);
                 }
             }
             fclose(dumpFile);
-            printf("\tSucursal %d: Archivo '%s' generado exitosamente!\n", *officePID, fileName);
+            printf("\tSucursal %d: Archivo '%s' generado exitosamente!\n", destinationPid, fileName);
         } else {
-            printf("\tSucursal %d: Se produjo un error al generar el archivo '%s'.\n", *officePID, fileName);
+            printf("\tSucursal %d: Se produjo un error al generar el archivo '%s'.\n", destinationPid, fileName);
         }
     }
 
