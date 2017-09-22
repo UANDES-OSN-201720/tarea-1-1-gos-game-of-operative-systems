@@ -297,12 +297,14 @@ int* parseCommandArguments(char* commandBuf){
         str_number = malloc(sizeof(char)*(last_number_index-last_letter_index + 1));
         str_second_number = malloc(sizeof(char)*(last_number_index-last_letter_index + 1));
         bool space = false;
+        int j = last_letter_index;
         for (int k = last_letter_index; k < last_number_index; k++){
 
             if (command[k] == ' '){
                 space = true;
             } else if (space){
-                str_second_number[0] = command[k];
+                str_second_number[j - last_letter_index] = command[k];
+                j++;
             } else {
                 str_number[k - last_letter_index] = command[k];
             }
@@ -310,6 +312,9 @@ int* parseCommandArguments(char* commandBuf){
         str_number[last_number_index] = '\0';
         numbers[0] = atoi(str_number);
         numbers[1] = atoi(str_second_number);
+        if (numbers[1]< 0 || numbers[1]>8){
+          numbers[1] = 1;
+        }
         free(str_number);
         free(str_second_number);
     }
