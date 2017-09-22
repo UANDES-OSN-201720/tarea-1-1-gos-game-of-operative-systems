@@ -225,9 +225,10 @@ void executeQuitCommand(int* pidArray, int* pidArrayCounter){
 }
 
 int* splitCommand(char** commandBuf){
-    static int output[] = {-1, -1};
-    output[1] = parseCommandArguments(*commandBuf);
-
+    static int output[] = {-1, -1, -1};
+    int* arguments = parseCommandArguments(*commandBuf);
+    output[1] = arguments[0];
+    output[2] = arguments[1];
     if (!strncmp("quit", *commandBuf, strlen("quit"))){
 
         output[0] = QUIT;
@@ -238,6 +239,9 @@ int* splitCommand(char** commandBuf){
 
         if (output[1] <= 0){
             output[1] = 1000;
+        }
+        if (output[2] <= 0){
+            output[2] = 1;
         }
 
     } else if (!strncmp("kill", *commandBuf, strlen("kill"))){
@@ -263,10 +267,12 @@ int* splitCommand(char** commandBuf){
     return output;
 }
 
-int parseCommandArguments(char* commandBuf){
+int* parseCommandArguments(char* commandBuf){
     char* command = commandBuf;
     char* str_number;
-    int last_letter_index = 0, last_number_index, number;
+    char* str_second_number;
+    static int numbers[] = {-1, -1};
+    int last_letter_index = 0, last_number_index;
     while (command[last_letter_index] != ' ' && command[last_letter_index] != '\0'){
         last_letter_index++;
     }
@@ -278,18 +284,25 @@ int parseCommandArguments(char* commandBuf){
 
         }
         str_number = malloc(sizeof(char)*(last_number_index-last_letter_index + 1));
+        str_second_number = malloc(sizeof(char)*(last_number_index-last_letter_index + 1));
+        bool space = false;
         for (int k = last_letter_index; k < last_number_index; k++){
-            str_number[k - last_letter_index] = command[k];
+
+            if (command[k] == ' '){
+                space = true;
+            } else if (space){
+                str_second_number[0] = command[k];
+            } else {
+                str_number[k - last_letter_index] = command[k];
+            }
         }
         str_number[last_number_index] = '\0';
-
-        number = atoi(str_number);
-
+        numbers[0] = atoi(str_number);
+        numbers[1] = atoi(str_second_number);
         free(str_number);
-    } else {
-        number = -1;
+        free(str_second_number);
     }
-    return number;
+    return numbers;
 }
 
 void killOffice(int officeId,int* pidArray,int* pidArrayCounter ){
