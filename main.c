@@ -41,7 +41,7 @@ struct arg_struct {
     int** toChildPipes;
     int** toBankPipes;
     int* accounts;
-    int* transactions;
+    int** transactions;
     int* officesPID;
     char** errors;
 };
@@ -130,9 +130,15 @@ int main(int argc, char** argv) {
                     //printf("Generando montos para las cuentas! %d\n", accountsArray[account]);
                 }
 
-                int transactionsArray[TRANSACTIONS_AMOUNT];
+                int** transactionsArray = malloc(sizeof(int*) * accountAmount);
+
                 for (int transaction = 0; transaction < TRANSACTIONS_AMOUNT; transaction++) {
-                    transactionsArray[transaction] = EMPTY_TRANSACTION;
+                    transactionsArray[transaction] = malloc(sizeof(int) * 4);
+
+                    transactionsArray[transaction][0] = 0;
+                    transactionsArray[transaction][1] = 0;
+                    transactionsArray[transaction][2] = 0;
+                    transactionsArray[transaction][3] = 0;
                 }
 
                 char** errorsArray = malloc(sizeof(char) * 80);
@@ -439,7 +445,7 @@ void* asyncListenTransactions(void* arguments) {
     int currentPid = getpid();
     int* accountsArray = threadArguments -> accounts;
     char** errorsArray = threadArguments -> errors;
-    int* transactionsArray = threadArguments -> transactions;
+    int** transactionsArray = threadArguments -> transactions;
     int* toChildPipe = threadArguments -> toChildPipe;
 
     if(DEVELOPMENT) {
@@ -513,7 +519,7 @@ char* messageToString(long long int message) {
     return finalMessage;
 }
 
-char* executeMessageOperation(struct messageData* parsedMessage, int* accountsArray, char** errorsArray, int* transactionsArray) {
+char* executeMessageOperation(struct messageData* parsedMessage, int* accountsArray, char** errorsArray, int** transactionsArray) {
     char* response = NULL;
 
     int destinationPid = parsedMessage -> destinationPid;
@@ -545,7 +551,7 @@ char* executeMessageOperation(struct messageData* parsedMessage, int* accountsAr
         }
         accountsArray[destintationAccount] += transactionAmount;
 
-        storeTransacction(transactionsArray, transactionAmount);
+        storeTransacction(transactionsArray, parsedMessage);
 
     // Operation 01: Widthraw money from destintationAccount
     } else if (operationCommand == WIDTHRAW_OP) {
@@ -556,7 +562,7 @@ char* executeMessageOperation(struct messageData* parsedMessage, int* accountsAr
         if (accountsArray[destintationAccount] >= transactionAmount){
             accountsArray[destintationAccount] -= transactionAmount;
 
-            storeTransacction(transactionsArray, -1 * transactionAmount);
+            storeTransacction(transactionsArray, parsedMessage);
 
             return NULL;
         } else {
@@ -578,10 +584,17 @@ char* executeMessageOperation(struct messageData* parsedMessage, int* accountsAr
         FILE *dumpFile = fopen(fileName,"w");
         if (dumpFile != NULL) {
 
-            fprintf(dumpFile,"transaction,amount\n");
+            fprintf(dumpFile,"transaction,sourcePid,sourceAccount,destintationAccount\n");
             for (int transaction = 0; transaction < TRANSACTIONS_AMOUNT; transaction++) {
-                if (transactionsArray[transaction] != EMPTY_TRANSACTION) {
-                    fprintf(dumpFile,"%d,%d\n", transaction, transactionsArray[transaction]);
+                if (is_transaction_empty(transactionsArray[transaction]) == 0) {
+                    int* transactionData = transactionsArray[transaction];
+
+                    char* transactionType = "widthraw";
+                    if (transactionData[0] == 0){
+                        transactionType = "deposit";
+                    }
+
+                    fprintf(dumpFile,"%s,%d,%d,%d\n", transactionType, transactionData[1], transactionData[2], transactionData[3]);
                 }
             }
             fclose(dumpFile);
@@ -643,13 +656,21 @@ char* parseFileName(char* rawFileName, int officePID) {
     return finalMessage;
 }
 
-void storeTransacction(int* transactionsArray, int transactionValue) {
+void storeTransacction(int** transactionsArray, struct messageData* parsedMessage) {
     for (int transaction = 0; transaction < sizeof(transactionsArray); transaction++) {
-        if (transactionsArray[transaction] == EMPTY_TRANSACTION) {
-            transactionsArray[transaction] = transactionValue;
+        if (is_transaction_empty(transactionsArray[transaction]) == 1) {
+            transactionsArray[transaction][0] = parsedMessage -> operationCommand;
+            transactionsArray[transaction][1] = parsedMessage -> sourcePid;
+            transactionsArray[transaction][2] = parsedMessage -> sourceAccount;
+            transactionsArray[transaction][3] = parsedMessage -> destintationAccount;
+
+            printf("%i | %i | %i | %i\n", transactionsArray[transaction][0], transactionsArray[transaction][1], transactionsArray[transaction][2], transactionsArray[transaction][3]);
             break;
         }
     }
+}
+int is_transaction_empty(int* transaction) {
+    return transaction[0] == 0 && transaction[1] == 0 && transaction[2] == 0 && transaction[3] == 0;
 }
 
 void logError(char** errorsArray, char* errorMessage){
