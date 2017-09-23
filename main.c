@@ -129,9 +129,9 @@ int main(int argc, char** argv) {
             } else if (!sucid) {
 
                 int accountAmount = command[1];
-                int terminalAmount = command[2];
+                int terminalsAmount = command[2];
                 int accountsArray[accountAmount];
-                int terminalsArray[terminalAmount];
+
                 for (int account = 0; account < accountAmount; account++) {
                     srand(time(NULL)+account);
                     accountsArray[account] = rand()%490000000 +1000;
@@ -165,11 +165,13 @@ int main(int argc, char** argv) {
                 threadArguments.officesPID = pidArray;
                 threadArguments.errors = errorsArray;
 
-                // Create transactionRequest thread
-                pthread_t transactionRequestThread;
-                int transactionsRequestsDisabled = pthread_create(&transactionRequestThread, NULL, asyncPostTransaction, &threadArguments);
-                if (transactionsRequestsDisabled){
-                    printf("Error creating transactions request thread. Consider killing the office.\n");
+                // Create office terminals threads
+                pthread_t terminalThreads[terminalsAmount];
+                for (int count = 0; count < terminalsAmount; ++count) {
+                    if (pthread_create(&terminalThreads[count], NULL, asyncPostTransaction, &threadArguments) != 0) {
+                        fprintf(stderr, "error: Cannot create thread # %d\n", count);
+                        break;
+                    }
                 }
 
                 // Create transactionResponse thread
