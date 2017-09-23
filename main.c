@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
                     //printf("Generando montos para las cuentas! %d\n", accountsArray[account]);
                 }
 
-                int** transactionsArray = malloc(sizeof(int*) * accountAmount);
+                int** transactionsArray = malloc(sizeof(int*) * TRANSACTIONS_AMOUNT);
 
                 for (int transaction = 0; transaction < TRANSACTIONS_AMOUNT; transaction++) {
                     transactionsArray[transaction] = malloc(sizeof(int) * 4);
@@ -453,6 +453,8 @@ void* asyncPostTransaction(void* arguments) {
         int officePIDindex = rand() % (childsAmount[0]); // puede que haya que poner un -1
         int destinationPid = officesPID[officePIDindex];
 
+        printf("---> %i, %i\n", destinationPid, officePIDindex);
+
         char* message = generateRandomTransaction(sourcePid, destinationPid);
         write(toBankPipe[WRITE], message, (strlen(message) + 1));
         sleep(1);
@@ -707,7 +709,7 @@ char* parseFileName(char* rawFileName, int officePID) {
 }
 
 void storeTransacction(int** transactionsArray, struct messageData* parsedMessage) {
-    for (int transaction = 0; transaction < sizeof(transactionsArray); transaction++) {
+    for (int transaction = 0; transaction < TRANSACTIONS_AMOUNT; transaction++) {
         if (is_transaction_empty(transactionsArray[transaction]) == 1) {
             transactionsArray[transaction][0] = parsedMessage -> operationCommand;
             transactionsArray[transaction][1] = parsedMessage -> sourcePid;
