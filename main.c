@@ -73,6 +73,7 @@ int main(int argc, char** argv) {
         toChildPipes[pipe] = malloc(sizeof(int) * 2);
         toBankPipes[pipe] = malloc(sizeof(int) * 2);
     }
+    pipe(toBankPipes[TOTAL_OFFICES - 1]);
     int currentChild = 0;
 
     const int bankId = getpid();
@@ -88,6 +89,11 @@ int main(int argc, char** argv) {
     int transactionsBroadcastDisabled = pthread_create(&transactionBroadcastThread, NULL, asyncTransactionBroadcast, &threadArguments);
     if (transactionsBroadcastDisabled){
         printf("Error creating transaction broadcast thread. Consider killing the program.\n");
+    }
+    pthread_t dumpBroadcastThread;
+    int dumpBroadcastDisabled = pthread_create(&dumpBroadcastThread, NULL, asyncDumpBroadcast, &threadArguments);
+    if (dumpBroadcastDisabled){
+        printf("Error creating dump broadcast thread. Consider killing the program.\n");
     }
 
     while (true) {
@@ -106,7 +112,7 @@ int main(int argc, char** argv) {
 
         }
         else if (command[0] == KILL) {
-            killOffice(command[1], pidArray, &pidArrayCounter);
+            killOffice(command[1], pidArray, &pidArrayCounter, pidAccountNumberArray, pidTerminalNumberArray);
 
         } else if (command[0] == INIT) {
             // Create child to parent pipe
@@ -188,7 +194,7 @@ int main(int argc, char** argv) {
             int childPID = command[1];
             // TODO: Filter in case childPID is empty or doesn't exist
             if (currentChild > 0) {
-                broadcastDumpCommand(bankId, &childPID, toBankPipes[0]);
+                broadcastDumpCommand(bankId, &childPID, toBankPipes[TOTAL_OFFICES - 1]);
             } else {
                 printf("CENTRAL: Aún no hay sucursales creadas.\n");
             }
@@ -197,7 +203,7 @@ int main(int argc, char** argv) {
             int childPID = command[1];
             // TODO: Filter in case childPID is empty or doesn't exist
             if (currentChild > 0) {
-                broadcastDumpAccsCommand(bankId, &childPID, toBankPipes[0]);
+                broadcastDumpAccsCommand(bankId, &childPID, toBankPipes[TOTAL_OFFICES - 1]);
             } else {
                 printf("CENTRAL: Aún no hay sucursales creadas.\n");
             }
@@ -206,7 +212,7 @@ int main(int argc, char** argv) {
             int childPID = command[1];
             // TODO: Filter in case childPID is empty or doesn't exist
             if (currentChild > 0) {
-                broadcastDumpErrsCommand(bankId, &childPID, toBankPipes[0]);
+                broadcastDumpErrsCommand(bankId, &childPID, toBankPipes[TOTAL_OFFICES - 1]);
             } else {
                 printf("CENTRAL: Aún no hay sucursales creadas.\n");
             }
@@ -329,13 +335,22 @@ int* parseCommandArguments(char* commandBuf){
     return numbers;
 }
 
-void killOffice(int officeId,int* pidArray,int* pidArrayCounter ){
-    int childPID = officeId;
-    killChild(childPID);
+void killOffice(int officeId, int* pidArray, int* pidArrayCounter, int* pidAccountNumberArray, int* pidTerminalNumberArray){
+    int childPID = 0;
+    for (int i = 0; i < *pidArrayCounter; i++){
+        if (pidArray[i] % 1000 == officeId){
+            childPID = pidArray[i];
+            killChild(childPID);
+            break;
+        }
+    }
+
 
     for (int i = 0; i < *pidArrayCounter; i++){
         if (pidArray[i] == childPID){
             pidArray[i] = pidArray[*pidArrayCounter - 1];
+            pidTerminalNumberArray[i] = pidTerminalNumberArray[*pidArrayCounter - 1];
+            pidAccountNumberArray[i] = pidAccountNumberArray[*pidArrayCounter - 1];
             *pidArrayCounter -= 1;
         }
     }
@@ -375,6 +390,26 @@ void* asyncTransactionBroadcast(void* arguments){
 
             broadcastFromPipe(&broadcastArguments);
         }
+    }
+}
+
+void* asyncDumpBroadcast(void* arguments){
+    struct arg_struct* threadArguments = arguments;
+    int* childsAmount = threadArguments -> childsAmount;
+    int** toChildPipes = threadArguments -> toChildPipes;
+    int** toBankPipes = threadArguments -> toBankPipes;
+
+    if(DEVELOPMENT) {
+        printf("CENTRAL: Async transaction broadcast initiated.\n");
+    }
+    while(true){
+
+        struct arg_struct broadcastArguments;
+        broadcastArguments.childsAmount = childsAmount;
+        broadcastArguments.toChildPipes = toChildPipes;
+        broadcastArguments.toBankPipe = toBankPipes[TOTAL_OFFICES - 1];
+
+        broadcastFromPipe(&broadcastArguments);
     }
 }
 
