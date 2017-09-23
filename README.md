@@ -1,5 +1,5 @@
-# Tarea 1
-A continuación se presenta la documentación de la primera entrega de la tarea 1.
+# Tarea 1.2
+A continuación se presenta la documentación de la entrega de la tarea 1.2.
 
 ---
 ## Funciones Principales
@@ -16,6 +16,8 @@ Cada sucursal a medida que escucha mensajes del padre, revisa si el paquete est�
 ## Problemas Encontrados
 A lo largo del desarrollo del sistema de bancos se presentan una serie de dificultades que se explican brevemente a continuación.
 
+- Creación de sucursales: en un principio cuandos se crea una sucursal copia la información existente en el minuto del estado del banco y con ello los pids existentes de otras sucursales. De esta forma, la primera sucursal no conoce otras y no tiene a quien mandarle transacciones. Esto se soluciona enviando un mensaje broadcast anunciando la creacion de una nueva sucursal.
+- Kill de sucursal: De forma análoga al problema de creación, al eliminar una sucursal, las otras no se enteran y siguen intentando comunicarse con ella. Se soluciona con un broadcast.
 - Procesos y memoria del sistema: Al crear los forks es necesario que tengan la misma información general. Esto se dificulta en el momento que se crea una nueva sucursal. En este caso el banco sabe que existe una nueva y la almacena, pero las sucursales antiguas quedan desactualizadas.
 Una forma de solucionar ésto fue mandar la información por los pipes de las sucursales como Broadcast.
 - Random: Existen varios datos que se requieren datos aleatorios, como es el caso de los saldos de las cuentas y las transacciones. El comando random de la librería ``<stdlib.h>`` toma en consideración el tiempo actual de la máquina. El problema surge cuando se necesita generar cien valores aleatorios. La máquina es tan veloz que genera el mismo número cien veces.
