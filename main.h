@@ -33,7 +33,7 @@ int getDestinationAccount(long long int message);
 int getTransactionAmount(long long int message);
 int getOperationCommand(long long int message);
 
-char* executeMessageOperation(struct messageData* parsedMessage, int* accountsArray, char** errorsArray, int** transactionsArray, int* officesPID);
+char* executeMessageOperation(struct messageData* parsedMessage, int* accountsArray, char** errorsArray, int** transactionsArray, int* officesPID, pthread_mutex_t *pidArrayLock);
 
 void storeTransacction(int** transactionsArray, struct messageData *parsedMessage);
 int is_transaction_empty(int* transaction);
