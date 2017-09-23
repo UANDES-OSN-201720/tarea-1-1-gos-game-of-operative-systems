@@ -398,32 +398,45 @@ void broadcastFromPipe(void* arguments) {
 
 void* asyncPostTransaction(void* arguments) {
     struct arg_struct* threadArguments = arguments;
-    int officePID = getpid();
+    int sourcePid = getpid();
     int* childsAmount = threadArguments -> childsAmount;
     int* toBankPipe = threadArguments -> toBankPipe;
     int* officesPID = threadArguments -> officesPID;
     if(DEVELOPMENT) {
-        printf("CHILD '%d': Async transaction post initiated.\n", officePID % 1000);
+        printf("CHILD '%d': Async transaction post initiated.\n", sourcePid % 1000);
     }
     while(true){
         srand(time(NULL));
         int officePIDindex = rand() % (childsAmount[0]); // puede que haya que poner un -1
-        int officePIDtransaction = officesPID[officePIDindex];
-        //printf("office t %d childsAmount %d officePID %d\n", officePIDtransaction, childsAmount[0], officePID);
-        char* message = generateTransaction(officePID % 1000, officePIDtransaction % 1000);
+        int destinationPid = officesPID[officePIDindex];
+
+        char* message = generateRandomTransaction(sourcePid, destinationPid);
         write(toBankPipe[WRITE], message, (strlen(message) + 1));
         sleep(1);
     }
 }
 
-char* generateTransaction(int pidBank, int pidOffice){
+char* generateRandomTransaction(int sourcePid, int destinationPid){
   sleep(1);
   srand(time(NULL));
-  long long int account = rand() % 90 + 10;
-  long long int amount = rand() % 90000 + 10000;
-  long long int transaction = rand() % 2;
 
-  long long int final = (((pidBank*1000 + pidOffice)*100 + account)*1000000 + amount)*10 + transaction;
+  long long int sourceAccount = rand() % 90 + 10;
+  long long int destintationAccount = rand() % 90 + 10;
+
+  long long int transactionAmount = rand() % 90000 + 10000;
+  long long int operationCommand = rand() % 2;
+
+  long long int final = 0;
+
+  final = final * 1000 + sourcePid % 1000;
+  final = final * 100 + sourceAccount;
+
+  final = final * 1000 + destinationPid % 1000;
+  final = final * 100 + destintationAccount;
+
+  final = final * 1000000 + transactionAmount;
+  final = final * 10 + operationCommand;
+
   return messageToString(final);
 }
 
@@ -450,7 +463,6 @@ void* asyncListenTransactions(void* arguments) {
         read(toChildPipe[READ], rawMessage, sizeof(rawMessage));
 
         long long int numericMessage = atoll(rawMessage);
-        printf(">>> '%lli'\n", numericMessage);
 
         struct messageData parsedMessage;
         parseNumericMessage(&parsedMessage, numericMessage);
@@ -479,25 +491,21 @@ int parseNumericMessage(struct messageData *parsedMessage, long long int numeric
     parsedMessage -> sourceAccount = getSourceAccount(numericMessage);
     parsedMessage -> operationCommand = getOperationCommand(numericMessage);
     parsedMessage -> transactionAmount = getTransactionAmount(numericMessage);
+
     return 0;
 }
 
 int getSourcePid(long long int message) {
-    // TODO: Fix for new format
-    return message % 1000000000000 / 1000000000;
+    return message % 100000000000000000 / 100000000000000;
 }
 
 int getSourceAccount(long long int message) {
     // TODO: Fix for new format
-    return message % 1000000000 / 10000000;
+    return message % 100000000000000 / 1000000000000;
 }
 
 int getDestinationPid(long long int message) {
     return message % 1000000000000 / 1000000000;
-}
-
-int getBankPID(long long int message){
-  return message / 1000000000000;
 }
 
 int getDestinationAccount(long long int message){
