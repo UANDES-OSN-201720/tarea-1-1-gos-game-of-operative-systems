@@ -22,6 +22,8 @@ const int WIDTHRAW_OP = 1;
 const int DUMP_OP = 2;
 const int DUMP_ACCS_OP = 3;
 const int DUMP_ERRS_OP = 4;
+const int NEW_CHILD_PID = 5;
+const int KILL_CHILD_PID = 6;
 
 const int READ = 0;
 const int WRITE = 1;
@@ -44,6 +46,7 @@ struct arg_struct {
     int** transactions;
     int* officesPID;
     char** errors;
+    pthread_mutex_t* pidArrayLock;
 };
 
 struct messageData {
@@ -60,11 +63,9 @@ struct messageData {
 int main(int argc, char** argv) {
     int* pidArray;
     int pidArrayCounter = 0;
-    int* pidAccountNumberArray;
-    int* pidTerminalNumberArray;
+    int pidAccountNumberArray[TOTAL_OFFICES];
+    int pidTerminalNumberArray[TOTAL_OFFICES];
     pidArray = malloc(sizeof(int) * 128);
-    pidAccountNumberArray = malloc(sizeof(int) * 128);
-    pidTerminalNumberArray = malloc(sizeof(int) * 128);
     // Initialize all child-bank and bank-child pipes
     int** toBankPipes = malloc(sizeof(int*) * TOTAL_OFFICES);
     int** toChildPipes = malloc(sizeof(int*) * TOTAL_OFFICES);
@@ -112,7 +113,15 @@ int main(int argc, char** argv) {
 
         }
         else if (command[0] == KILL) {
-            killOffice(command[1], pidArray, &pidArrayCounter, pidAccountNumberArray, pidTerminalNumberArray);
+            int sourcePid = command[1];
+            killOffice(sourcePid, pidArray, &pidArrayCounter, pidAccountNumberArray, pidTerminalNumberArray);
+
+            for(int office = 0; office < pidArrayCounter; ++office) {
+                if (sourcePid != pidArray[office] && pidArray[office] != 0) {
+                    char* message = generatePidBroacast(sourcePid, pidArray[office], KILL_CHILD_PID);
+                    write(toBankPipes[TOTAL_OFFICES - 1][WRITE], message, (strlen(message) + 1));
+                }
+            }
 
         } else if (command[0] == INIT) {
             // Create child to parent pipe
@@ -161,6 +170,8 @@ int main(int argc, char** argv) {
                 }
 
                 accountsArray[0] = 1000;
+                pthread_mutex_t pidArrayLock;
+                pthread_mutex_init(&pidArrayLock, NULL);
 
                 struct arg_struct threadArguments;
                 threadArguments.toBankPipe = toBankPipes[currentChild - 1];
@@ -170,6 +181,7 @@ int main(int argc, char** argv) {
                 threadArguments.transactions = transactionsArray;
                 threadArguments.officesPID = pidArray;
                 threadArguments.errors = errorsArray;
+                threadArguments.pidArrayLock = &pidArrayLock;
 
                 // Create office terminals threads
                 pthread_t terminalThreads[terminalsAmount];
@@ -190,6 +202,7 @@ int main(int argc, char** argv) {
                 // This while prevents the process from being killed
                 while(true){
                 }
+                pthread_mutex_destroy(&pidArrayLock);
 
                 _exit(EXIT_SUCCESS);
 
@@ -359,6 +372,11 @@ void killOffice(int officeId, int* pidArray, int* pidArrayCounter, int* pidAccou
             pidArray[i] = pidArray[*pidArrayCounter - 1];
             pidTerminalNumberArray[i] = pidTerminalNumberArray[*pidArrayCounter - 1];
             pidAccountNumberArray[i] = pidAccountNumberArray[*pidArrayCounter - 1];
+
+            pidArray[*pidArrayCounter - 1] = 0;
+            pidTerminalNumberArray[*pidArrayCounter - 1] = 0;
+            pidAccountNumberArray[*pidArrayCounter - 1] = 0;
+
             *pidArrayCounter -= 1;
         }
     }
@@ -366,17 +384,8 @@ void killOffice(int officeId, int* pidArray, int* pidArrayCounter, int* pidAccou
 }
 
 void killChild(int pid){
-    kill(pid, SIGTERM);
     printf("Matando hijo pid:'%d'\n", pid);
-
-    bool died = false;
-    for (int loop = 0; !died && loop < 5; loop++){
-        int status;
-        sleep(1);
-        if (waitpid(pid, &status, WNOHANG) == pid) died = true;
-    }
-
-    if (!died) kill(pid, SIGKILL);
+    kill(pid, SIGKILL);
 }
 
 void* asyncTransactionBroadcast(void* arguments){
@@ -445,19 +454,38 @@ void* asyncPostTransaction(void* arguments) {
     int* childsAmount = threadArguments -> childsAmount;
     int* toBankPipe = threadArguments -> toBankPipe;
     int* officesPID = threadArguments -> officesPID;
+    int** transactionsArray = threadArguments -> transactions;
+    pthread_mutex_t *pidArrayLock = threadArguments -> pidArrayLock;
+
     if(DEVELOPMENT) {
         printf("CHILD '%d': Async transaction post initiated.\n", sourcePid % 1000);
     }
+    pthread_mutex_lock(pidArrayLock);
+    for(int office = 0; office < TOTAL_OFFICES; ++office) {
+        if (sourcePid != officesPID[office] && officesPID[office] != 0) {
+            char* message = generatePidBroacast(sourcePid, officesPID[office], NEW_CHILD_PID);
+            write(toBankPipe[WRITE], message, (strlen(message) + 1));
+        }
+    }
+    pthread_mutex_unlock(pidArrayLock);
+
     while(true){
         srand(time(NULL));
         int officePIDindex = rand() % (childsAmount[0]); // puede que haya que poner un -1
+
+        pthread_mutex_lock(pidArrayLock);
         int destinationPid = officesPID[officePIDindex];
 
-        printf("---> %i, %i\n", destinationPid, officePIDindex);
-
         char* message = generateRandomTransaction(sourcePid, destinationPid);
+
+        long long int numericMessage = atoll(message);
+        struct messageData parsedMessage;
+        parseNumericMessage(&parsedMessage, numericMessage);
+        storeTransacction(transactionsArray, &parsedMessage);
+
         write(toBankPipe[WRITE], message, (strlen(message) + 1));
         sleep(1);
+        pthread_mutex_unlock(pidArrayLock);
     }
 }
 
@@ -485,6 +513,19 @@ char* generateRandomTransaction(int sourcePid, int destinationPid){
   return messageToString(final);
 }
 
+char* generatePidBroacast(int newChildPid, int destinationPid, int action){
+  sleep(1);
+  srand(time(NULL));
+
+  long long int final = 0;
+
+  final = final * 1000 + newChildPid % 1000;
+  final = final * 100000 + destinationPid % 1000;
+  final = final * 1000000000 + action;
+
+  return messageToString(final);
+}
+
 char* intToString(int pid) {
     char* message = malloc(sizeof(char) * 20);
     sprintf(message, "%d", pid);
@@ -499,6 +540,8 @@ void* asyncListenTransactions(void* arguments) {
     char** errorsArray = threadArguments -> errors;
     int** transactionsArray = threadArguments -> transactions;
     int* toChildPipe = threadArguments -> toChildPipe;
+    int* officesPID = threadArguments -> officesPID;
+    pthread_mutex_t *pidArrayLock = threadArguments -> pidArrayLock;
 
     if(DEVELOPMENT) {
         printf("CHILD %d: Async transaction listening initiated\n", currentPid % 1000);
@@ -513,7 +556,7 @@ void* asyncListenTransactions(void* arguments) {
         parseNumericMessage(&parsedMessage, numericMessage);
 
         if (shouldExecuteMessage(parsedMessage.destinationPid, currentPid)) {
-            executeMessageOperation(&parsedMessage, accountsArray, errorsArray, transactionsArray);
+            executeMessageOperation(&parsedMessage, accountsArray, errorsArray, transactionsArray, officesPID, pidArrayLock);
             /*
 
             if(*response) {
@@ -571,14 +614,12 @@ char* messageToString(long long int message) {
     return finalMessage;
 }
 
-char* executeMessageOperation(struct messageData* parsedMessage, int* accountsArray, char** errorsArray, int** transactionsArray) {
+char* executeMessageOperation(struct messageData* parsedMessage, int* accountsArray, char** errorsArray, int** transactionsArray, int* officesPID, pthread_mutex_t *pidArrayLock) {
     char* response = NULL;
 
     int destinationPid = parsedMessage -> destinationPid;
     int destintationAccount = parsedMessage -> destintationAccount;
-    // TODO: Use commented variables
-    // int sourcePid = parsedMessage -> sourcePid;
-    // int sourceAccount = parsedMessage -> sourceAccount;
+    int sourcePid = parsedMessage -> sourcePid;
     int operationCommand = parsedMessage -> operationCommand;
     int transactionAmount = parsedMessage -> transactionAmount;
 
@@ -603,8 +644,6 @@ char* executeMessageOperation(struct messageData* parsedMessage, int* accountsAr
         }
         accountsArray[destintationAccount] += transactionAmount;
 
-        storeTransacction(transactionsArray, parsedMessage);
-
     // Operation 01: Widthraw money from destintationAccount
     } else if (operationCommand == WIDTHRAW_OP) {
         if(DEVELOPMENT) {
@@ -613,8 +652,6 @@ char* executeMessageOperation(struct messageData* parsedMessage, int* accountsAr
 
         if (accountsArray[destintationAccount] >= transactionAmount){
             accountsArray[destintationAccount] -= transactionAmount;
-
-            storeTransacction(transactionsArray, parsedMessage);
 
             return NULL;
         } else {
@@ -696,6 +733,33 @@ char* executeMessageOperation(struct messageData* parsedMessage, int* accountsAr
         } else {
             printf("\tSucursal %d: Se produjo un error al generar el archivo '%s'.\n", destinationPid, fileName);
         }
+    } else if (operationCommand == NEW_CHILD_PID) {
+        if(DEVELOPMENT) {
+            printf("\tCHILD %d: ADDING NEW CHILD PID\n", destinationPid);
+        }
+
+        pthread_mutex_lock(pidArrayLock);
+        for(int office = 0; office < TOTAL_OFFICES; ++office) {
+            if (officesPID[office] == 0) {
+                officesPID[office] = 10000 + sourcePid;
+                break;
+            }
+        }
+        pthread_mutex_unlock(pidArrayLock);
+
+    } else if (operationCommand == KILL_CHILD_PID) {
+        if(DEVELOPMENT) {
+            printf("\tCHILD %d: REMOVING CHILD PID\n", destinationPid);
+        }
+        pthread_mutex_lock(pidArrayLock);
+        for(int office = 0; office < TOTAL_OFFICES; ++office) {
+            if (officesPID[office] == sourcePid) {
+                printf("removing %i\n", sourcePid);
+                officesPID[office] = 0;
+                break;
+            }
+        }
+        pthread_mutex_unlock(pidArrayLock);
     }
 
     response = "Responding message to sender apparently...";
@@ -716,11 +780,11 @@ void storeTransacction(int** transactionsArray, struct messageData* parsedMessag
             transactionsArray[transaction][2] = parsedMessage -> sourceAccount;
             transactionsArray[transaction][3] = parsedMessage -> destintationAccount;
 
-            printf("%i | %i | %i | %i\n", transactionsArray[transaction][0], transactionsArray[transaction][1], transactionsArray[transaction][2], transactionsArray[transaction][3]);
             break;
         }
     }
 }
+
 int is_transaction_empty(int* transaction) {
     return transaction[0] == 0 && transaction[1] == 0 && transaction[2] == 0 && transaction[3] == 0;
 }
