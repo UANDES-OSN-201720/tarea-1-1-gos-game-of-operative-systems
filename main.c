@@ -60,8 +60,11 @@ struct messageData {
 int main(int argc, char** argv) {
     int* pidArray;
     int pidArrayCounter = 0;
+    int* pidAccountNumberArray;
+    int* pidTerminalNumberArray;
     pidArray = malloc(sizeof(int) * 128);
-
+    pidAccountNumberArray = malloc(sizeof(int) * 128);
+    pidTerminalNumberArray = malloc(sizeof(int) * 128);
     // Initialize all child-bank and bank-child pipes
     int** toBankPipes = malloc(sizeof(int*) * TOTAL_OFFICES);
     int** toChildPipes = malloc(sizeof(int*) * TOTAL_OFFICES);
@@ -93,15 +96,16 @@ int main(int argc, char** argv) {
         if (command[0] == QUIT) {
             executeQuitCommand(pidArray, &pidArrayCounter);
             break;
-
-        } else if (command[0] == LIST) {
+        }
+        else if (command[0] == LIST) {
             printf("Lista de sucursales: \n");
             for (int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
-                printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex] % 1000);
+                printf("Sucursal almacenada con ID '%d', Cuentas: 1-%d, Terminales: %d\n", pidArray[sucIndex] % 1000, pidAccountNumberArray[sucIndex], pidTerminalNumberArray[sucIndex]);
                 // TODO: Missing accounts amount for every office.
             }
 
-        } else if (command[0] == KILL) {
+        }
+        else if (command[0] == KILL) {
             killOffice(command[1], pidArray, &pidArrayCounter);
 
         } else if (command[0] == INIT) {
@@ -117,13 +121,17 @@ int main(int argc, char** argv) {
                 printf("Sucursal creada con ID '%d'\n", sucid % 1000);
 
                 pidArray[pidArrayCounter] = sucid;
+                pidAccountNumberArray[pidArrayCounter] = command[1];
+                pidTerminalNumberArray[pidArrayCounter] = command[2];
                 pidArrayCounter = pidArrayCounter + 1;
 
                 continue;
             } else if (!sucid) {
 
                 int accountAmount = command[1];
+                int terminalAmount = command[2];
                 int accountsArray[accountAmount];
+                int terminalsArray[terminalAmount];
                 for (int account = 0; account < accountAmount; account++) {
                     srand(time(NULL)+account);
                     accountsArray[account] = rand()%490000000 +1000;
