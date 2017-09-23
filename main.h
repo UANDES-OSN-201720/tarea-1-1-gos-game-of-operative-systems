@@ -8,6 +8,7 @@ int* parseCommandArguments(char* commandBuf);
 void killOffice(int officeId, int* pidArray, int* pidArrayCounter, int* pidAccountNumberArray, int* pidTerminalNumberArray);
 void killChild(int pid);
 void* asyncTransactionBroadcast(void* argunemts);
+void* asyncDumpBroadcast(void* arguments);
 void* asyncPostTransaction(void* arguments);
 void* asyncListenTransactions(void* arguments);
 char* intToString(int pid);
