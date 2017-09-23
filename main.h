@@ -17,6 +17,7 @@ void broadcastDumpCommand(const int bankPID, int* childPID, int* toBankPipe);
 void broadcastDumpAccsCommand(const int bankPID, int* childPID, int* toBankPipe);
 void broadcastDumpErrsCommand(const int bankPID, int* childPID, int* toBankPipe);
 char* generateRandomTransaction(int sourcePid, int destinationPid);
+char* generatePidBroacast(int newChildPid, int destinationPid, int action);
 char* messageToString(long long int message);
 
 // Message parsing functions
@@ -32,7 +33,7 @@ int getDestinationAccount(long long int message);
 int getTransactionAmount(long long int message);
 int getOperationCommand(long long int message);
 
-char* executeMessageOperation(struct messageData* parsedMessage, int* accountsArray, char** errorsArray, int** transactionsArray);
+char* executeMessageOperation(struct messageData* parsedMessage, int* accountsArray, char** errorsArray, int** transactionsArray, int* officesPID);
 
 void storeTransacction(int** transactionsArray, struct messageData *parsedMessage);
 int is_transaction_empty(int* transaction);
