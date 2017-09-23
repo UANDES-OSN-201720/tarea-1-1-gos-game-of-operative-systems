@@ -60,8 +60,11 @@ struct messageData {
 int main(int argc, char** argv) {
     int* pidArray;
     int pidArrayCounter = 0;
+    int* pidAccountNumberArray;
+    int* pidTerminalNumberArray;
     pidArray = malloc(sizeof(int) * 128);
-
+    pidAccountNumberArray = malloc(sizeof(int) * 128);
+    pidTerminalNumberArray = malloc(sizeof(int) * 128);
     // Initialize all child-bank and bank-child pipes
     int** toBankPipes = malloc(sizeof(int*) * TOTAL_OFFICES);
     int** toChildPipes = malloc(sizeof(int*) * TOTAL_OFFICES);
@@ -93,15 +96,16 @@ int main(int argc, char** argv) {
         if (command[0] == QUIT) {
             executeQuitCommand(pidArray, &pidArrayCounter);
             break;
-
-        } else if (command[0] == LIST) {
+        }
+        else if (command[0] == LIST) {
             printf("Lista de sucursales: \n");
             for (int sucIndex = 0; sucIndex < pidArrayCounter; sucIndex++){
-                printf("Sucursal almacenada con ID '%d'\n", pidArray[sucIndex] % 1000);
+                printf("Sucursal almacenada con ID '%d', Cuentas: 1-%d, Terminales: %d\n", pidArray[sucIndex] % 1000, pidAccountNumberArray[sucIndex], pidTerminalNumberArray[sucIndex]);
                 // TODO: Missing accounts amount for every office.
             }
 
-        } else if (command[0] == KILL) {
+        }
+        else if (command[0] == KILL) {
             killOffice(command[1], pidArray, &pidArrayCounter);
 
         } else if (command[0] == INIT) {
@@ -117,13 +121,17 @@ int main(int argc, char** argv) {
                 printf("Sucursal creada con ID '%d'\n", sucid % 1000);
 
                 pidArray[pidArrayCounter] = sucid;
+                pidAccountNumberArray[pidArrayCounter] = command[1];
+                pidTerminalNumberArray[pidArrayCounter] = command[2];
                 pidArrayCounter = pidArrayCounter + 1;
 
                 continue;
             } else if (!sucid) {
 
                 int accountAmount = command[1];
+                int terminalAmount = command[2];
                 int accountsArray[accountAmount];
+                int terminalsArray[terminalAmount];
                 for (int account = 0; account < accountAmount; account++) {
                     srand(time(NULL)+account);
                     accountsArray[account] = rand()%490000000 +1000;
@@ -303,12 +311,14 @@ int* parseCommandArguments(char* commandBuf){
         str_number = malloc(sizeof(char)*(last_number_index-last_letter_index + 1));
         str_second_number = malloc(sizeof(char)*(last_number_index-last_letter_index + 1));
         bool space = false;
+        int j = last_letter_index;
         for (int k = last_letter_index; k < last_number_index; k++){
 
             if (command[k] == ' '){
                 space = true;
             } else if (space){
-                str_second_number[0] = command[k];
+                str_second_number[j - last_letter_index] = command[k];
+                j++;
             } else {
                 str_number[k - last_letter_index] = command[k];
             }
@@ -316,6 +326,9 @@ int* parseCommandArguments(char* commandBuf){
         str_number[last_number_index] = '\0';
         numbers[0] = atoi(str_number);
         numbers[1] = atoi(str_second_number);
+        if (numbers[1]< 0 || numbers[1]>8){
+          numbers[1] = 1;
+        }
         free(str_number);
         free(str_second_number);
     }
