@@ -34,7 +34,7 @@ const char* EMPTY_ERROR = "-";
 const int TOTAL_OFFICES = 128;
 const int TRANSACTIONS_AMOUNT = 1000;
 
-const int DEVELOPMENT = true;
+const int DEVELOPMENT = false;
 
 struct arg_struct {
     int* childsAmount;
@@ -466,6 +466,11 @@ void* asyncPostTransaction(void* arguments) {
         int destinationPid = officesPID[officePIDindex];
 
         char* message = generateRandomTransaction(sourcePid, destinationPid);
+
+        struct messageData parsedMessage;
+        parseNumericMessage(&parsedMessage, numericMessage);
+        storeTransacction(transactionsArray, parsedMessage);
+
         write(toBankPipe[WRITE], message, (strlen(message) + 1));
         sleep(1);
     }
@@ -627,8 +632,6 @@ char* executeMessageOperation(struct messageData* parsedMessage, int* accountsAr
         }
         accountsArray[destintationAccount] += transactionAmount;
 
-        storeTransacction(transactionsArray, parsedMessage);
-
     // Operation 01: Widthraw money from destintationAccount
     } else if (operationCommand == WIDTHRAW_OP) {
         if(DEVELOPMENT) {
@@ -637,8 +640,6 @@ char* executeMessageOperation(struct messageData* parsedMessage, int* accountsAr
 
         if (accountsArray[destintationAccount] >= transactionAmount){
             accountsArray[destintationAccount] -= transactionAmount;
-
-            storeTransacction(transactionsArray, parsedMessage);
 
             return NULL;
         } else {
